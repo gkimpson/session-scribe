@@ -17,6 +17,33 @@ export type RecorderStatus =
     | 'failed'
     | 'blocked';
 
+export interface CapturedAudio {
+    blob: Blob;
+    url: string;
+    mimeType: string;
+    extension: string;
+    sizeBytes: number;
+    durationSeconds: number;
+}
+
+export const MAX_SECONDS = 60 * 60;
+export const MAX_BYTES = 250 * 1024 * 1024;
+
+const mimeCandidates: { mimeType: string; extension: string }[] = [
+    { mimeType: 'audio/webm;codecs=opus', extension: 'webm' },
+    { mimeType: 'audio/webm', extension: 'webm' },
+    { mimeType: 'audio/mp4', extension: 'm4a' },
+    { mimeType: 'audio/ogg;codecs=opus', extension: 'ogg' },
+];
+
+function pickMimeType(): { mimeType: string; extension: string } | null {
+    return (
+        mimeCandidates.find((candidate) =>
+            MediaRecorder.isTypeSupported(candidate.mimeType),
+        ) ?? null
+    );
+}
+
 export type FailStage = 'record' | 'upload' | 'summary';
 
 export const statusLabels: Record<RecorderStatus, string> = {
@@ -63,6 +90,16 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
     const timers: Record<string, ReturnType<typeof setInterval>> = {};
     let stream: MediaStream | null = null;
     let recorder: MediaRecorder | null = null;
+    let chunks: Blob[] = [];
+    let extension = 'webm';
+    const audio = ref<CapturedAudio | null>(null);
+
+    function clearAudio(): void {
+        if (audio.value) {
+            URL.revokeObjectURL(audio.value.url);
+        }
+        audio.value = null;
+    }
 
     function clearTimers(): void {
         Object.values(timers).forEach((id) => {
@@ -94,6 +131,20 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
         failReason.value = '';
         sections.value = [];
         status.value = 'recording';
+        clearAudio();
+
+        if (typeof MediaRecorder === 'undefined') {
+            fail('record', 'This browser cannot record audio.');
+            return;
+        }
+
+        if (!navigator.mediaDevices?.getUserMedia) {
+            fail(
+                'record',
+                'The microphone is only available on a secure (HTTPS) page. Open this site over HTTPS and try again.',
+            );
+            return;
+        }
 
         try {
             stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -105,25 +156,83 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
                 name === 'PermissionDeniedError'
             ) {
                 status.value = 'blocked';
+            } else if (name === 'NotReadableError') {
+                fail(
+                    'record',
+                    'The microphone is in use by another app or tab. Close it and try again.',
+                );
             } else {
                 fail(
                     'record',
-                    'No microphone was found, so the consultation was not recorded.',
+                    'No microphone was found, so nothing was recorded.',
                 );
             }
             return;
         }
 
-        recorder = new MediaRecorder(stream);
-        recorder.start();
-        timers.elapsed = setInterval(() => (elapsed.value += 1), 1000);
+        const format = pickMimeType();
+        if (!format) {
+            fail(
+                'record',
+                'This browser cannot record audio in a supported format.',
+            );
+            return;
+        }
+
+        chunks = [];
+        extension = format.extension;
+        recorder = new MediaRecorder(stream, { mimeType: format.mimeType });
+        recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                chunks.push(event.data);
+            }
+        };
+        recorder.onerror = () =>
+            fail(
+                'record',
+                'The recording stopped unexpectedly. Nothing was saved.',
+            );
+        recorder.start(1000);
+        timers.elapsed = setInterval(() => {
+            elapsed.value += 1;
+            if (elapsed.value >= MAX_SECONDS) {
+                stop();
+            }
+        }, 1000);
     }
 
     function stop(): void {
         clearInterval(timers.elapsed);
-        recorder?.stop();
+        const active = recorder;
+        if (!active || active.state === 'inactive') {
+            return;
+        }
+
+        active.onstop = () => {
+            const blob = new Blob(chunks, { type: active.mimeType });
+            chunks = [];
+            if (blob.size === 0) {
+                fail('record', 'No audio was captured, so nothing was saved.');
+            } else if (blob.size > MAX_BYTES) {
+                fail(
+                    'record',
+                    'The recording is over the 250 MB limit and was not saved.',
+                );
+            } else {
+                clearAudio();
+                audio.value = {
+                    blob,
+                    url: URL.createObjectURL(blob),
+                    mimeType: active.mimeType,
+                    extension,
+                    sizeBytes: blob.size,
+                    durationSeconds: elapsed.value,
+                };
+                beginUpload(0);
+            }
+        };
+        active.stop();
         stopStream();
-        beginUpload(0);
     }
 
     function beginUpload(from: number): void {
@@ -186,6 +295,7 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
     function reset(): void {
         clearTimers();
         stopStream();
+        clearAudio();
         status.value = 'idle';
         consent.value = false;
         elapsed.value = 0;
@@ -199,6 +309,7 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
     onBeforeUnmount(() => {
         clearTimers();
         stopStream();
+        clearAudio();
     });
 
     return reactive({
@@ -212,6 +323,7 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
         failStage,
         failReason,
         transcript,
+        audio,
         record,
         stop,
         summarise,

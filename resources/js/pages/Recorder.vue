@@ -5,7 +5,10 @@ import {
     FwbBadge,
     FwbButton,
     FwbButtonGroup,
+    FwbCard,
     FwbCheckbox,
+    FwbListGroup,
+    FwbListGroupItem,
     FwbProgress,
     FwbTextarea,
 } from 'flowbite-vue';
@@ -101,9 +104,21 @@ const announce = computed(() => {
     return statusLabels[flow.status];
 });
 
+function formatDuration(seconds: number): string {
+    const minutes = String(Math.floor(seconds / 60)).padStart(2, '0');
+
+    return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function formatSize(bytes: number): string {
+    return bytes < 1024 * 1024
+        ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+        : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 const kicker =
     'text-[11px] font-bold tracking-[0.14em] text-ink-muted uppercase';
-const panel = 'border-2 border-ink';
+const card = 'min-w-0 border-2 border-ink shadow-none';
 </script>
 
 <template>
@@ -210,9 +225,9 @@ const panel = 'border-2 border-ink';
                     </div>
                 </section>
 
-                <section
+                <FwbCard
                     v-if="flow.status === 'recording'"
-                    :class="[panel, 'bg-panel']"
+                    :class="`${card} bg-panel`"
                 >
                     <div
                         class="border-ink flex items-center gap-3.5 border-b-2 px-6 py-5"
@@ -245,11 +260,11 @@ const panel = 'border-2 border-ink';
                             </FwbButton>
                         </div>
                     </div>
-                </section>
+                </FwbCard>
 
-                <section
+                <FwbCard
                     v-if="flow.status === 'uploading'"
-                    :class="[panel, 'flex flex-col gap-3.5 px-6 py-5']"
+                    :class="`${card} flex flex-col gap-3.5 px-6 py-5`"
                 >
                     <div class="flex items-baseline justify-between gap-3">
                         <span class="text-lg font-extrabold">Uploading</span>
@@ -261,11 +276,11 @@ const panel = 'border-2 border-ink';
                     <p class="text-ink-muted max-w-[62ch] text-sm">
                         Keep this page open until the upload finishes.
                     </p>
-                </section>
+                </FwbCard>
 
-                <section
+                <FwbCard
                     v-if="flow.status === 'transcribing'"
-                    :class="[panel, 'flex flex-col gap-4 px-6 py-5']"
+                    :class="`${card} flex flex-col gap-4 px-6 py-5`"
                 >
                     <span class="text-lg font-extrabold">Transcribing</span>
                     <div class="flex flex-col gap-2.5" aria-hidden="true">
@@ -280,7 +295,7 @@ const panel = 'border-2 border-ink';
                         This usually takes under a minute. You can leave the
                         page and come back.
                     </p>
-                </section>
+                </FwbCard>
 
                 <FwbAlert
                     v-if="flow.status === 'blocked'"
@@ -318,6 +333,29 @@ const panel = 'border-2 border-ink';
                     <FwbButton @click="flow.retry()">Retry</FwbButton>
                 </FwbAlert>
 
+                <section
+                    v-if="flow.audio && flow.status !== 'recording'"
+                    class="flex flex-col gap-3"
+                >
+                    <div
+                        class="border-ink flex flex-wrap items-baseline justify-between gap-4 border-b-2 pb-3"
+                    >
+                        <h2 class="text-2xl font-extrabold">Audio</h2>
+                        <span class="text-ink-muted text-[13px] font-semibold"
+                            >{{ flow.audio.extension.toUpperCase() }} ·
+                            {{ formatSize(flow.audio.sizeBytes) }} ·
+                            {{
+                                formatDuration(flow.audio.durationSeconds)
+                            }}</span
+                        >
+                    </div>
+                    <audio
+                        controls
+                        :src="flow.audio.url"
+                        class="w-full"
+                    ></audio>
+                </section>
+
                 <section v-if="hasTranscript" class="flex flex-col">
                     <div
                         class="border-ink flex flex-wrap items-baseline justify-between gap-4 border-b-2 pb-3"
@@ -341,21 +379,21 @@ const panel = 'border-2 border-ink';
                             recording.
                         </p>
                     </div>
-                    <div
-                        class="border-ink bg-well flex max-h-85 flex-col gap-3.5 overflow-auto border-2 border-t-0 px-6 py-5"
+                    <FwbListGroup
+                        class="border-ink bg-well max-h-85 w-full overflow-auto rounded-none border-2 border-t-0"
                     >
-                        <p
+                        <FwbListGroupItem
                             v-for="(turn, index) in flow.transcript"
                             :key="index"
-                            class="grid grid-cols-[96px_1fr] items-baseline gap-3 text-[15px] leading-relaxed"
+                            class="border-line grid grid-cols-[96px_1fr] items-baseline gap-3 px-6 py-3.5 text-[15px] leading-relaxed"
                         >
                             <span
                                 class="text-ink-muted text-xs font-bold tracking-wider uppercase"
                                 >{{ turn.who }}</span
                             >
                             <span>{{ turn.text }}</span>
-                        </p>
-                    </div>
+                        </FwbListGroupItem>
+                    </FwbListGroup>
                 </section>
 
                 <section
@@ -401,8 +439,8 @@ const panel = 'border-2 border-ink';
                     <span class="text-lg font-extrabold"
                         >Generating summary</span
                     >
-                    <div
-                        :class="[panel, 'flex flex-col gap-4 px-6 py-5']"
+                    <FwbCard
+                        :class="`${card} flex flex-col gap-4 px-6 py-5`"
                         aria-hidden="true"
                     >
                         <div class="bg-line h-3 w-1/3 animate-pulse"></div>
@@ -410,7 +448,7 @@ const panel = 'border-2 border-ink';
                         <div class="bg-line h-3 w-3/4 animate-pulse"></div>
                         <div class="bg-line h-3 w-1/4 animate-pulse"></div>
                         <div class="bg-line h-3 w-5/6 animate-pulse"></div>
-                    </div>
+                    </FwbCard>
                 </section>
 
                 <section
