@@ -1,7 +1,7 @@
 import { queryParams, type RouteQueryOptions, type RouteDefinition, type RouteFormDefinition, applyUrlDefaults, validateParameters } from './../wayfinder'
 /**
 * @see \App\Http\Controllers\RecorderController::__invoke
-* @see app/Http/Controllers/RecorderController.php:12
+* @see app/Http/Controllers/RecorderController.php:13
 * @route '/{transcriptId?}'
 */
 export const home = (args?: { transcriptId?: string | number } | [transcriptId: string | number ] | string | number, options?: RouteQueryOptions): RouteDefinition<'get'> => ({
@@ -16,7 +16,7 @@ home.definition = {
 
 /**
 * @see \App\Http\Controllers\RecorderController::__invoke
-* @see app/Http/Controllers/RecorderController.php:12
+* @see app/Http/Controllers/RecorderController.php:13
 * @route '/{transcriptId?}'
 */
 home.url = (args?: { transcriptId?: string | number } | [transcriptId: string | number ] | string | number, options?: RouteQueryOptions) => {
@@ -47,7 +47,7 @@ home.url = (args?: { transcriptId?: string | number } | [transcriptId: string | 
 
 /**
 * @see \App\Http\Controllers\RecorderController::__invoke
-* @see app/Http/Controllers/RecorderController.php:12
+* @see app/Http/Controllers/RecorderController.php:13
 * @route '/{transcriptId?}'
 */
 home.get = (args?: { transcriptId?: string | number } | [transcriptId: string | number ] | string | number, options?: RouteQueryOptions): RouteDefinition<'get'> => ({
@@ -57,7 +57,7 @@ home.get = (args?: { transcriptId?: string | number } | [transcriptId: string | 
 
 /**
 * @see \App\Http\Controllers\RecorderController::__invoke
-* @see app/Http/Controllers/RecorderController.php:12
+* @see app/Http/Controllers/RecorderController.php:13
 * @route '/{transcriptId?}'
 */
 home.head = (args?: { transcriptId?: string | number } | [transcriptId: string | number ] | string | number, options?: RouteQueryOptions): RouteDefinition<'head'> => ({
@@ -67,7 +67,7 @@ home.head = (args?: { transcriptId?: string | number } | [transcriptId: string |
 
 /**
 * @see \App\Http\Controllers\RecorderController::__invoke
-* @see app/Http/Controllers/RecorderController.php:12
+* @see app/Http/Controllers/RecorderController.php:13
 * @route '/{transcriptId?}'
 */
 const homeForm = (args?: { transcriptId?: string | number } | [transcriptId: string | number ] | string | number, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
@@ -77,7 +77,7 @@ const homeForm = (args?: { transcriptId?: string | number } | [transcriptId: str
 
 /**
 * @see \App\Http\Controllers\RecorderController::__invoke
-* @see app/Http/Controllers/RecorderController.php:12
+* @see app/Http/Controllers/RecorderController.php:13
 * @route '/{transcriptId?}'
 */
 homeForm.get = (args?: { transcriptId?: string | number } | [transcriptId: string | number ] | string | number, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
@@ -87,7 +87,7 @@ homeForm.get = (args?: { transcriptId?: string | number } | [transcriptId: strin
 
 /**
 * @see \App\Http\Controllers\RecorderController::__invoke
-* @see app/Http/Controllers/RecorderController.php:12
+* @see app/Http/Controllers/RecorderController.php:13
 * @route '/{transcriptId?}'
 */
 homeForm.head = (args?: { transcriptId?: string | number } | [transcriptId: string | number ] | string | number, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({

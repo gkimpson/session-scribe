@@ -74,17 +74,37 @@ it('marks a recording uploaded when the object exists at the right size', functi
     expect($recording->fresh()->state)->toBe(RecordingState::Uploaded);
 });
 
-it('refuses to confirm an upload that is missing or the wrong size', function (?int $storedSize) {
+it('leaves the recording pending when the object is not there yet', function () {
     $recording = Recording::factory()->create(['size_bytes' => 5000]);
-    $this->storage->shouldReceive('storedSize')->andReturn($storedSize);
+    $this->storage->shouldReceive('storedSize')->andReturn(null);
+    $this->storage->shouldNotReceive('delete');
 
     $this->postJson(route('recordings.upload', $recording))->assertUnprocessable();
 
     expect($recording->fresh()->state)->toBe(RecordingState::PendingUpload);
-})->with([
-    'missing' => [null],
-    'wrong size' => [4999],
-]);
+});
+
+it('deletes the object and fails the recording when the size is wrong', function () {
+    $recording = Recording::factory()->create(['size_bytes' => 5000]);
+    $this->storage->shouldReceive('storedSize')->andReturn(4999);
+    $this->storage->shouldReceive('delete')->once()->with(Mockery::on(fn ($r) => $r->is($recording)));
+
+    $this->postJson(route('recordings.upload', $recording))->assertUnprocessable();
+
+    expect($recording->fresh())
+        ->state->toBe(RecordingState::Failed)
+        ->failure_reason->toContain('size');
+});
+
+it('rate limits recording requests', function () {
+    $this->storage->shouldReceive('presignedUpload')->andReturn(new PresignedUpload('https://bucket.example/u', []));
+
+    foreach (range(1, 20) as $ignored) {
+        $this->postJson(route('recordings.store'), validPayload())->assertCreated();
+    }
+
+    $this->postJson(route('recordings.store'), validPayload())->assertStatus(429);
+});
 
 it('does not re-check a recording that is already uploaded', function () {
     $recording = Recording::factory()->uploaded()->create();

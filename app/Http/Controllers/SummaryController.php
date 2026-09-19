@@ -18,7 +18,7 @@ class SummaryController extends Controller
     public static function payload(Summary $summary): array
     {
         return [
-            'id' => $summary->id,
+            'id' => $summary->uuid,
             'level' => $summary->level->value,
             'state' => $summary->state->value,
             'sections' => $summary->sections,

@@ -22,13 +22,13 @@ import { home } from '@/routes';
 
 const props = defineProps<{
     transcript: {
-        id: number;
+        id: string;
         recordingId: string;
         s3Key: string;
         turns: { speaker: string; text: string }[];
         redacted: boolean;
         summaries: {
-            id: number;
+            id: string;
             level: 'brief' | 'normal' | 'detailed';
             state: string;
             sections: { heading: string; body: string }[] | null;
@@ -451,7 +451,9 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
                     >
                         <h2 class="text-2xl font-extrabold">
                             Transcript{{
-                                transcript ? ` #${transcript.id}` : ''
+                                transcript
+                                    ? ` #${transcript.id.slice(0, 8)}`
+                                    : ''
                             }}
                         </h2>
                         <span class="text-ink-muted text-[13px] font-semibold"

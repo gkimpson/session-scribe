@@ -1,22 +1,24 @@
 <?php
 
 use App\Enums\SummaryLevel;
+use App\Exceptions\SummaryUnavailable;
 use App\Models\Transcript;
 use App\Services\BedrockSummaryGenerator;
 use Aws\BedrockRuntime\BedrockRuntimeClient;
 use Aws\Result;
 use GuzzleHttp\Promise\Create;
 
-function generatorReplying(string $text, array &$sent): BedrockSummaryGenerator
+function generatorReplying(string|array $reply, array &$sent): BedrockSummaryGenerator
 {
+    $content = is_array($reply) ? $reply : [['text' => $reply]];
     $client = new BedrockRuntimeClient([
         'version' => 'latest',
         'region' => 'eu-west-2',
         'credentials' => ['key' => 'k', 'secret' => 's'],
-        'handler' => function ($command) use (&$sent, $text) {
+        'handler' => function ($command) use (&$sent, $content) {
             $sent[] = $command;
 
-            return Create::promiseFor(new Result(['output' => ['message' => ['content' => [['text' => $text]]]]]));
+            return Create::promiseFor(new Result(['output' => ['message' => ['content' => $content]]]));
         },
     ]);
 
@@ -70,3 +72,37 @@ it('throws when the model returns something unusable', function (string $reply) 
     generatorReplying($reply, $sent)->generate(Transcript::factory()->make(), SummaryLevel::Brief);
 })->with(['plain text' => ['Sorry, I cannot do that.'], 'empty sections' => ['{"sections": []}']])
     ->throws(RuntimeException::class);
+
+it('reads the summary from the tool call', function () {
+    $sent = [];
+    $reply = [['toolUse' => ['name' => 'save_summary', 'input' => ['sections' => [
+        ['heading' => 'What we discussed', 'body' => 'Asthma review.'],
+        ['heading' => 'Decisions', 'body' => 'Same inhaler.'],
+    ]]]]];
+
+    $result = generatorReplying($reply, $sent)->generate(Transcript::factory()->make(), SummaryLevel::Brief);
+
+    expect($result)->toBe([
+        ['heading' => 'What we discussed', 'body' => 'Asthma review.'],
+        ['heading' => 'Decisions', 'body' => 'Same inhaler.'],
+    ])
+        ->and($sent[0]['toolConfig']['toolChoice'])->toBe(['tool' => ['name' => 'save_summary']])
+        ->and($sent[0]['toolConfig']['tools'][0]['toolSpec']['inputSchema']['json']['required'])->toBe(['sections']);
+});
+
+it('refuses a transcript that is too long, without calling the model', function () {
+    config(['recordings.summary.max_transcript_characters' => 100]);
+    $sent = [];
+
+    expect(fn () => generatorReplying('{}', $sent)->generate(Transcript::factory()->make(['text' => str_repeat('a', 101)]), SummaryLevel::Brief))
+        ->toThrow(SummaryUnavailable::class, 'too long');
+    expect($sent)->toBe([]);
+});
+
+it('refuses a transcript with no text, without calling the model', function () {
+    $sent = [];
+
+    expect(fn () => generatorReplying('{}', $sent)->generate(Transcript::factory()->make(['text' => '  ']), SummaryLevel::Brief))
+        ->toThrow(SummaryUnavailable::class, 'no text');
+    expect($sent)->toBe([]);
+});

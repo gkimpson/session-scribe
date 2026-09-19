@@ -56,6 +56,86 @@ storeForm.post = (options?: RouteQueryOptions): RouteFormDefinition<'post'> => (
 store.form = storeForm
 
 /**
+* @see \App\Http\Controllers\RecordingUploadController::__invoke
+* @see app/Http/Controllers/RecordingUploadController.php:13
+* @route '/recordings/{recording}/upload'
+*/
+export const upload = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteDefinition<'post'> => ({
+    url: upload.url(args, options),
+    method: 'post',
+})
+
+upload.definition = {
+    methods: ["post"],
+    url: '/recordings/{recording}/upload',
+} satisfies RouteDefinition<["post"]>
+
+/**
+* @see \App\Http\Controllers\RecordingUploadController::__invoke
+* @see app/Http/Controllers/RecordingUploadController.php:13
+* @route '/recordings/{recording}/upload'
+*/
+upload.url = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions) => {
+    if (typeof args === 'string' || typeof args === 'number') {
+        args = { recording: args }
+    }
+
+    if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
+        args = { recording: args.id }
+    }
+
+    if (Array.isArray(args)) {
+        args = {
+            recording: args[0],
+        }
+    }
+
+    args = applyUrlDefaults(args)
+
+    const parsedArgs = {
+        recording: typeof args.recording === 'object'
+        ? args.recording.id
+        : args.recording,
+    }
+
+    return upload.definition.url
+            .replace('{recording}', parsedArgs.recording.toString())
+            .replace(/\/+$/, '') + queryParams(options)
+}
+
+/**
+* @see \App\Http\Controllers\RecordingUploadController::__invoke
+* @see app/Http/Controllers/RecordingUploadController.php:13
+* @route '/recordings/{recording}/upload'
+*/
+upload.post = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteDefinition<'post'> => ({
+    url: upload.url(args, options),
+    method: 'post',
+})
+
+/**
+* @see \App\Http\Controllers\RecordingUploadController::__invoke
+* @see app/Http/Controllers/RecordingUploadController.php:13
+* @route '/recordings/{recording}/upload'
+*/
+const uploadForm = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
+    action: upload.url(args, options),
+    method: 'post',
+})
+
+/**
+* @see \App\Http\Controllers\RecordingUploadController::__invoke
+* @see app/Http/Controllers/RecordingUploadController.php:13
+* @route '/recordings/{recording}/upload'
+*/
+uploadForm.post = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
+    action: upload.url(args, options),
+    method: 'post',
+})
+
+upload.form = uploadForm
+
+/**
 * @see \App\Http\Controllers\RecordingController::show
 * @see app/Http/Controllers/RecordingController.php:44
 * @route '/recordings/{recording}'
@@ -160,90 +240,10 @@ showForm.head = (args: { recording: string | { id: string } } | [recording: stri
 
 show.form = showForm
 
-/**
-* @see \App\Http\Controllers\RecordingUploadController::__invoke
-* @see app/Http/Controllers/RecordingUploadController.php:13
-* @route '/recordings/{recording}/upload'
-*/
-export const upload = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteDefinition<'post'> => ({
-    url: upload.url(args, options),
-    method: 'post',
-})
-
-upload.definition = {
-    methods: ["post"],
-    url: '/recordings/{recording}/upload',
-} satisfies RouteDefinition<["post"]>
-
-/**
-* @see \App\Http\Controllers\RecordingUploadController::__invoke
-* @see app/Http/Controllers/RecordingUploadController.php:13
-* @route '/recordings/{recording}/upload'
-*/
-upload.url = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions) => {
-    if (typeof args === 'string' || typeof args === 'number') {
-        args = { recording: args }
-    }
-
-    if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
-        args = { recording: args.id }
-    }
-
-    if (Array.isArray(args)) {
-        args = {
-            recording: args[0],
-        }
-    }
-
-    args = applyUrlDefaults(args)
-
-    const parsedArgs = {
-        recording: typeof args.recording === 'object'
-        ? args.recording.id
-        : args.recording,
-    }
-
-    return upload.definition.url
-            .replace('{recording}', parsedArgs.recording.toString())
-            .replace(/\/+$/, '') + queryParams(options)
-}
-
-/**
-* @see \App\Http\Controllers\RecordingUploadController::__invoke
-* @see app/Http/Controllers/RecordingUploadController.php:13
-* @route '/recordings/{recording}/upload'
-*/
-upload.post = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteDefinition<'post'> => ({
-    url: upload.url(args, options),
-    method: 'post',
-})
-
-/**
-* @see \App\Http\Controllers\RecordingUploadController::__invoke
-* @see app/Http/Controllers/RecordingUploadController.php:13
-* @route '/recordings/{recording}/upload'
-*/
-const uploadForm = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
-    action: upload.url(args, options),
-    method: 'post',
-})
-
-/**
-* @see \App\Http\Controllers\RecordingUploadController::__invoke
-* @see app/Http/Controllers/RecordingUploadController.php:13
-* @route '/recordings/{recording}/upload'
-*/
-uploadForm.post = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
-    action: upload.url(args, options),
-    method: 'post',
-})
-
-upload.form = uploadForm
-
 const recordings = {
     store: Object.assign(store, store),
-    show: Object.assign(show, show),
     upload: Object.assign(upload, upload),
+    show: Object.assign(show, show),
 }
 
 export default recordings

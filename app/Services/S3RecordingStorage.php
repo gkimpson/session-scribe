@@ -33,4 +33,13 @@ class S3RecordingStorage implements RecordingStorage
             return null;
         }
     }
+
+    public function delete(Recording $recording): void
+    {
+        try {
+            Storage::disk(config('recordings.disk'))->delete($recording->s3_key);
+        } catch (FilesystemException) {
+            // Nothing to do. The reconcile command tries again later.
+        }
+    }
 }

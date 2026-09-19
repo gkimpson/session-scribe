@@ -16,4 +16,9 @@ interface RecordingStorage
      * Size in bytes of the stored object, or null if it isn't there.
      */
     public function storedSize(Recording $recording): ?int;
+
+    /**
+     * Remove the stored object. Safe to call when it isn't there.
+     */
+    public function delete(Recording $recording): void;
 }

@@ -53,7 +53,7 @@ class RecordingController extends Controller
             'failure_reason' => $recording->failure_reason,
             'turns' => $transcript?->turns,
             'redacted' => $transcript?->redacted,
-            'transcript_id' => $transcript?->id,
+            'transcript_id' => $transcript?->uuid,
         ]);
     }
 }

@@ -8,6 +8,12 @@ interface CreatedRecording {
     upload: { url: string; headers: Record<string, string | string[]> };
 }
 
+export class HttpError extends Error {
+    constructor(public status: number) {
+        super(`Request failed with status ${status}`);
+    }
+}
+
 function xsrfToken(): string {
     const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
 
@@ -26,7 +32,7 @@ async function postJson<T>(url: string, body?: object): Promise<T> {
     });
 
     if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        throw new HttpError(response.status);
     }
 
     return (await response.json()) as T;
@@ -100,7 +106,7 @@ export interface RecordingStatus {
     failureReason: string | null;
     turns: TranscriptTurn[] | null;
     redacted: boolean | null;
-    transcriptId: number | null;
+    transcriptId: string | null;
 }
 
 export async function fetchRecording(id: string): Promise<RecordingStatus> {
@@ -117,7 +123,7 @@ export async function fetchRecording(id: string): Promise<RecordingStatus> {
         failure_reason: string | null;
         turns: TranscriptTurn[] | null;
         redacted: boolean | null;
-        transcript_id: number | null;
+        transcript_id: string | null;
     };
 
     return {
@@ -137,7 +143,7 @@ export interface SummarySection {
 }
 
 export interface SummaryView {
-    id: number;
+    id: string;
     level: SummaryLevel;
     state: string;
     sections: SummarySection[] | null;
@@ -145,7 +151,7 @@ export interface SummaryView {
 }
 
 interface SummaryPayload {
-    id: number;
+    id: string;
     level: SummaryLevel;
     state: string;
     sections: SummarySection[] | null;
@@ -163,7 +169,7 @@ export function toSummaryView(payload: SummaryPayload): SummaryView {
 }
 
 export async function requestSummary(
-    transcriptId: number,
+    transcriptId: string,
     level: SummaryLevel,
 ): Promise<SummaryView> {
     return toSummaryView(
@@ -173,7 +179,7 @@ export async function requestSummary(
     );
 }
 
-export async function fetchSummary(id: number): Promise<SummaryView> {
+export async function fetchSummary(id: string): Promise<SummaryView> {
     const response = await fetch(showSummary(id).url, {
         headers: { Accept: 'application/json' },
     });

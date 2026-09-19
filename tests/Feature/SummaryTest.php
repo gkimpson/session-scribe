@@ -3,9 +3,11 @@
 use App\Contracts\SummaryGenerator;
 use App\Enums\SummaryLevel;
 use App\Enums\SummaryState;
+use App\Exceptions\SummaryUnavailable;
 use App\Jobs\GenerateSummary;
 use App\Models\Summary;
 use App\Models\Transcript;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Support\Facades\Queue;
 
 it('queues a summary for a level', function (string $level) {
@@ -37,7 +39,7 @@ it('returns an existing summary instead of making another', function () {
 
     $this->postJson(route('transcripts.summaries.store', $summary->transcript), ['level' => 'brief'])
         ->assertStatus(202)
-        ->assertJson(['id' => $summary->id, 'state' => 'complete']);
+        ->assertJson(['id' => $summary->uuid, 'state' => 'complete']);
 
     expect(Summary::count())->toBe(1);
     Queue::assertNothingPushed();
@@ -49,7 +51,7 @@ it('retries a failed summary', function () {
 
     $this->postJson(route('transcripts.summaries.store', $summary->transcript), ['level' => 'normal'])
         ->assertStatus(202)
-        ->assertJson(['id' => $summary->id, 'state' => 'queued', 'failure_reason' => null]);
+        ->assertJson(['id' => $summary->uuid, 'state' => 'queued', 'failure_reason' => null]);
 
     Queue::assertPushed(GenerateSummary::class);
 });
@@ -102,4 +104,61 @@ it('marks the summary failed when generation throws', function () {
     expect($summary->fresh())
         ->state->toBe(SummaryState::Failed)
         ->failure_reason->toBe('The summary could not be generated.');
+});
+
+it('does not dispatch twice for a double click', function () {
+    Queue::fake();
+    $transcript = Transcript::factory()->create();
+
+    $this->postJson(route('transcripts.summaries.store', $transcript), ['level' => 'brief'])->assertStatus(202);
+    $this->postJson(route('transcripts.summaries.store', $transcript), ['level' => 'brief'])->assertStatus(202);
+
+    expect(Summary::count())->toBe(1);
+    Queue::assertPushed(GenerateSummary::class, 1);
+});
+
+it('does not dispatch twice when a failed summary is retried at the same moment', function () {
+    Queue::fake();
+    $summary = Summary::factory()->create(['state' => SummaryState::Failed]);
+
+    foreach (range(1, 2) as $ignored) {
+        $this->postJson(route('transcripts.summaries.store', $summary->transcript), ['level' => 'normal'])->assertStatus(202);
+    }
+
+    Queue::assertPushed(GenerateSummary::class, 1);
+});
+
+it('uses uuids, not counting numbers, in summary urls', function () {
+    $summary = Summary::factory()->complete()->create();
+
+    $this->getJson("/summaries/{$summary->id}")->assertNotFound();
+    $this->getJson(route('summaries.show', $summary))->assertOk()->assertJsonPath('id', $summary->uuid);
+});
+
+it('rate limits summary requests', function () {
+    Queue::fake();
+    $transcript = Transcript::factory()->create();
+
+    foreach (range(1, 10) as $ignored) {
+        $this->postJson(route('transcripts.summaries.store', $transcript), ['level' => 'brief'])->assertStatus(202);
+    }
+
+    $this->postJson(route('transcripts.summaries.store', $transcript), ['level' => 'brief'])->assertStatus(429);
+});
+
+it('marks a summary failed with the reason when the transcript cannot be summarised', function () {
+    $summary = Summary::factory()->create();
+    $generator = Mockery::mock(SummaryGenerator::class);
+    $generator->shouldReceive('generate')->andThrow(new SummaryUnavailable('This transcript is too long to summarise.'));
+
+    (new GenerateSummary($summary->id))->handle($generator);
+
+    expect($summary->fresh())
+        ->state->toBe(SummaryState::Failed)
+        ->failure_reason->toBe('This transcript is too long to summarise.');
+});
+
+it('allows one pending job per summary', function () {
+    expect((new GenerateSummary(7))->uniqueId())->toBe('7')
+        ->and(new GenerateSummary(7))->toBeInstanceOf(ShouldBeUniqueUntilProcessing::class);
 });

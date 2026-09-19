@@ -4,7 +4,7 @@ import { queryParams, type RouteQueryOptions, type RouteDefinition, type RouteFo
 * @see app/Http/Controllers/SummaryController.php:10
 * @route '/summaries/{summary}'
 */
-export const show = (args: { summary: number | { id: number } } | [summary: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions): RouteDefinition<'get'> => ({
+export const show = (args: { summary: string | { uuid: string } } | [summary: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions): RouteDefinition<'get'> => ({
     url: show.url(args, options),
     method: 'get',
 })
@@ -19,13 +19,13 @@ show.definition = {
 * @see app/Http/Controllers/SummaryController.php:10
 * @route '/summaries/{summary}'
 */
-show.url = (args: { summary: number | { id: number } } | [summary: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions) => {
+show.url = (args: { summary: string | { uuid: string } } | [summary: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions) => {
     if (typeof args === 'string' || typeof args === 'number') {
         args = { summary: args }
     }
 
-    if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
-        args = { summary: args.id }
+    if (typeof args === 'object' && !Array.isArray(args) && 'uuid' in args) {
+        args = { summary: args.uuid }
     }
 
     if (Array.isArray(args)) {
@@ -38,7 +38,7 @@ show.url = (args: { summary: number | { id: number } } | [summary: number | { id
 
     const parsedArgs = {
         summary: typeof args.summary === 'object'
-        ? args.summary.id
+        ? args.summary.uuid
         : args.summary,
     }
 
@@ -52,7 +52,7 @@ show.url = (args: { summary: number | { id: number } } | [summary: number | { id
 * @see app/Http/Controllers/SummaryController.php:10
 * @route '/summaries/{summary}'
 */
-show.get = (args: { summary: number | { id: number } } | [summary: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions): RouteDefinition<'get'> => ({
+show.get = (args: { summary: string | { uuid: string } } | [summary: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions): RouteDefinition<'get'> => ({
     url: show.url(args, options),
     method: 'get',
 })
@@ -62,7 +62,7 @@ show.get = (args: { summary: number | { id: number } } | [summary: number | { id
 * @see app/Http/Controllers/SummaryController.php:10
 * @route '/summaries/{summary}'
 */
-show.head = (args: { summary: number | { id: number } } | [summary: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions): RouteDefinition<'head'> => ({
+show.head = (args: { summary: string | { uuid: string } } | [summary: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions): RouteDefinition<'head'> => ({
     url: show.url(args, options),
     method: 'head',
 })
@@ -72,7 +72,7 @@ show.head = (args: { summary: number | { id: number } } | [summary: number | { i
 * @see app/Http/Controllers/SummaryController.php:10
 * @route '/summaries/{summary}'
 */
-const showForm = (args: { summary: number | { id: number } } | [summary: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
+const showForm = (args: { summary: string | { uuid: string } } | [summary: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
     action: show.url(args, options),
     method: 'get',
 })
@@ -82,7 +82,7 @@ const showForm = (args: { summary: number | { id: number } } | [summary: number 
 * @see app/Http/Controllers/SummaryController.php:10
 * @route '/summaries/{summary}'
 */
-showForm.get = (args: { summary: number | { id: number } } | [summary: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
+showForm.get = (args: { summary: string | { uuid: string } } | [summary: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
     action: show.url(args, options),
     method: 'get',
 })
@@ -92,7 +92,7 @@ showForm.get = (args: { summary: number | { id: number } } | [summary: number | 
 * @see app/Http/Controllers/SummaryController.php:10
 * @route '/summaries/{summary}'
 */
-showForm.head = (args: { summary: number | { id: number } } | [summary: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
+showForm.head = (args: { summary: string | { uuid: string } } | [summary: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
     action: show.url(args, {
         [options?.mergeQuery ? 'mergeQuery' : 'query']: {
             _method: 'HEAD',

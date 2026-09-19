@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\TranscriptFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,7 +14,23 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Transcript extends Model
 {
     /** @use HasFactory<TranscriptFactory> */
-    use HasFactory;
+    use HasFactory, HasUuids;
+
+    /**
+     * The numeric id is the primary key. URLs use the uuid column instead, so
+     * they can't be guessed by counting.
+     *
+     * @return list<string>
+     */
+    public function uniqueIds(): array
+    {
+        return ['uuid'];
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'uuid';
+    }
 
     /**
      * @return array<string, string>

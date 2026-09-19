@@ -4,11 +4,13 @@ namespace App\Jobs;
 
 use App\Contracts\SummaryGenerator;
 use App\Enums\SummaryState;
+use App\Exceptions\SummaryUnavailable;
 use App\Models\Summary;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
-class GenerateSummary implements ShouldQueue
+class GenerateSummary implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Queueable;
 
@@ -16,7 +18,14 @@ class GenerateSummary implements ShouldQueue
 
     public int $timeout = 120;
 
+    public int $uniqueFor = 300;
+
     public function __construct(public int $summaryId) {}
+
+    public function uniqueId(): string
+    {
+        return (string) $this->summaryId;
+    }
 
     public function handle(SummaryGenerator $generator): void
     {
@@ -28,7 +37,16 @@ class GenerateSummary implements ShouldQueue
 
         $summary->update(['state' => SummaryState::Summarising]);
 
-        $sections = $generator->generate($summary->transcript, $summary->level);
+        try {
+            $sections = $generator->generate($summary->transcript, $summary->level);
+        } catch (SummaryUnavailable $exception) {
+            $summary->update([
+                'state' => SummaryState::Failed,
+                'failure_reason' => $exception->getMessage(),
+            ]);
+
+            return;
+        }
 
         $summary->update([
             'state' => SummaryState::Complete,

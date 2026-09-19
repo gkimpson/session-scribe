@@ -16,8 +16,20 @@ class RecordingUploadController extends Controller
             return response()->json(['state' => $recording->state->value]);
         }
 
-        if ($storage->storedSize($recording) !== $recording->size_bytes) {
-            return response()->json(['message' => 'The uploaded audio was not found or is the wrong size.'], 422);
+        $storedSize = $storage->storedSize($recording);
+
+        if ($storedSize === null) {
+            return response()->json(['message' => 'The uploaded audio was not found.'], 422);
+        }
+
+        if ($storedSize !== $recording->size_bytes) {
+            $storage->delete($recording);
+            $recording->update([
+                'state' => RecordingState::Failed,
+                'failure_reason' => 'The uploaded audio did not match the size that was declared.',
+            ]);
+
+            return response()->json(['message' => 'The uploaded audio is the wrong size and was removed.'], 422);
         }
 
         $recording->update(['state' => RecordingState::Uploaded]);

@@ -7,10 +7,11 @@ use App\Contracts\TranscriptionProvider;
 use App\Enums\RecordingState;
 use App\Enums\TranscriptionJobStatus;
 use App\Models\Recording;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
-class CheckTranscription implements ShouldQueue
+class CheckTranscription implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Queueable;
 
@@ -18,7 +19,18 @@ class CheckTranscription implements ShouldQueue
 
     public function __construct(public string $recordingId) {}
 
+    /**
+     * One pending check per recording, so the reconcile command can't start
+     * a second chain while one is already running.
+     */
+    public function uniqueId(): string
+    {
+        return $this->recordingId;
+    }
+
     public int $tries = 3;
+
+    public int $uniqueFor = 60;
 
     public int $backoff = 5;
 

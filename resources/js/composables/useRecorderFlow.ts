@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, reactive, ref } from 'vue';
 import {
     fetchRecording,
     fetchSummary,
+    HttpError,
     requestSummary,
     toSummaryView,
     uploadRecording,
@@ -82,7 +83,7 @@ export const stepOrder: RecorderStatus[] = [
  * finishes. Summaries come in later.
  */
 export function useRecorderFlow(initial?: {
-    id: number;
+    id: string;
     recordingId: string;
     s3Key: string;
     turns: TranscriptTurn[];
@@ -100,7 +101,7 @@ export function useRecorderFlow(initial?: {
     const turns = ref<TranscriptTurn[]>([]);
     const waitedSeconds = ref(0);
     const redacted = ref(true);
-    const transcriptId = ref<number | null>(null);
+    const transcriptId = ref<string | null>(null);
     const detail = ref<SummaryLevel>('normal');
     const summaries = ref<Partial<Record<SummaryLevel, SummaryView>>>({});
     const currentSummary = computed(
@@ -146,7 +147,7 @@ export function useRecorderFlow(initial?: {
 
     function failSummary(level: SummaryLevel, reason: string): void {
         summaries.value[level] = {
-            id: summaries.value[level]?.id ?? 0,
+            id: summaries.value[level]?.id ?? '',
             level,
             state: 'failed',
             sections: null,
@@ -201,7 +202,7 @@ export function useRecorderFlow(initial?: {
         }
 
         summaries.value[level] = {
-            id: existing?.id ?? 0,
+            id: existing?.id ?? '',
             level,
             state: 'queued',
             sections: null,
@@ -214,8 +215,13 @@ export function useRecorderFlow(initial?: {
             if (!['complete', 'failed'].includes(view.state)) {
                 pollSummary(level);
             }
-        } catch {
-            failSummary(level, 'The summary could not be started.');
+        } catch (error) {
+            failSummary(
+                level,
+                error instanceof HttpError && error.status === 429
+                    ? 'Too many summary requests. Wait a minute and try again.'
+                    : 'The summary could not be started.',
+            );
         }
     }
 

@@ -1,10 +1,10 @@
 import { queryParams, type RouteQueryOptions, type RouteDefinition, type RouteFormDefinition, applyUrlDefaults } from './../../../wayfinder'
 /**
 * @see \App\Http\Controllers\TranscriptSummaryController::store
-* @see app/Http/Controllers/TranscriptSummaryController.php:20
+* @see app/Http/Controllers/TranscriptSummaryController.php:21
 * @route '/transcripts/{transcript}/summaries'
 */
-export const store = (args: { transcript: number | { id: number } } | [transcript: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions): RouteDefinition<'post'> => ({
+export const store = (args: { transcript: string | { uuid: string } } | [transcript: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions): RouteDefinition<'post'> => ({
     url: store.url(args, options),
     method: 'post',
 })
@@ -16,16 +16,16 @@ store.definition = {
 
 /**
 * @see \App\Http\Controllers\TranscriptSummaryController::store
-* @see app/Http/Controllers/TranscriptSummaryController.php:20
+* @see app/Http/Controllers/TranscriptSummaryController.php:21
 * @route '/transcripts/{transcript}/summaries'
 */
-store.url = (args: { transcript: number | { id: number } } | [transcript: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions) => {
+store.url = (args: { transcript: string | { uuid: string } } | [transcript: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions) => {
     if (typeof args === 'string' || typeof args === 'number') {
         args = { transcript: args }
     }
 
-    if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
-        args = { transcript: args.id }
+    if (typeof args === 'object' && !Array.isArray(args) && 'uuid' in args) {
+        args = { transcript: args.uuid }
     }
 
     if (Array.isArray(args)) {
@@ -38,7 +38,7 @@ store.url = (args: { transcript: number | { id: number } } | [transcript: number
 
     const parsedArgs = {
         transcript: typeof args.transcript === 'object'
-        ? args.transcript.id
+        ? args.transcript.uuid
         : args.transcript,
     }
 
@@ -49,30 +49,30 @@ store.url = (args: { transcript: number | { id: number } } | [transcript: number
 
 /**
 * @see \App\Http\Controllers\TranscriptSummaryController::store
-* @see app/Http/Controllers/TranscriptSummaryController.php:20
+* @see app/Http/Controllers/TranscriptSummaryController.php:21
 * @route '/transcripts/{transcript}/summaries'
 */
-store.post = (args: { transcript: number | { id: number } } | [transcript: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions): RouteDefinition<'post'> => ({
+store.post = (args: { transcript: string | { uuid: string } } | [transcript: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions): RouteDefinition<'post'> => ({
     url: store.url(args, options),
     method: 'post',
 })
 
 /**
 * @see \App\Http\Controllers\TranscriptSummaryController::store
-* @see app/Http/Controllers/TranscriptSummaryController.php:20
+* @see app/Http/Controllers/TranscriptSummaryController.php:21
 * @route '/transcripts/{transcript}/summaries'
 */
-const storeForm = (args: { transcript: number | { id: number } } | [transcript: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
+const storeForm = (args: { transcript: string | { uuid: string } } | [transcript: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
     action: store.url(args, options),
     method: 'post',
 })
 
 /**
 * @see \App\Http\Controllers\TranscriptSummaryController::store
-* @see app/Http/Controllers/TranscriptSummaryController.php:20
+* @see app/Http/Controllers/TranscriptSummaryController.php:21
 * @route '/transcripts/{transcript}/summaries'
 */
-storeForm.post = (args: { transcript: number | { id: number } } | [transcript: number | { id: number } ] | number | { id: number }, options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
+storeForm.post = (args: { transcript: string | { uuid: string } } | [transcript: string | { uuid: string } ] | string | { uuid: string }, options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
     action: store.url(args, options),
     method: 'post',
 })

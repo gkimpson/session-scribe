@@ -7,6 +7,7 @@ use App\Enums\SummaryState;
 use App\Jobs\GenerateSummary;
 use App\Models\Summary;
 use App\Models\Transcript;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -23,18 +24,32 @@ class TranscriptSummaryController extends Controller
             'level' => ['required', Rule::enum(SummaryLevel::class)],
         ])['level']);
 
-        $summary = Summary::firstOrCreate([
+        $attributes = [
             'transcript_id' => $transcript->id,
             'level' => $level,
             'model_id' => config('recordings.summary.model_id'),
             'prompt_version' => config('recordings.summary.prompt_version'),
-        ], ['state' => SummaryState::Queued]);
+        ];
 
-        if ($summary->state === SummaryState::Failed) {
-            $summary->update(['state' => SummaryState::Queued, 'failure_reason' => null]);
+        try {
+            $summary = Summary::firstOrCreate($attributes, ['state' => SummaryState::Queued]);
+        } catch (UniqueConstraintViolationException) {
+            // A second click landed at the same moment. Use the row that won.
+            $summary = Summary::where($attributes)->firstOrFail();
         }
 
-        if ($summary->wasRecentlyCreated || $summary->state === SummaryState::Queued) {
+        $shouldDispatch = $summary->wasRecentlyCreated;
+
+        if ($summary->state === SummaryState::Failed) {
+            $retried = Summary::whereKey($summary->id)
+                ->where('state', SummaryState::Failed)
+                ->update(['state' => SummaryState::Queued, 'failure_reason' => null]);
+
+            $shouldDispatch = $retried === 1;
+            $summary->refresh();
+        }
+
+        if ($shouldDispatch) {
             GenerateSummary::dispatch($summary->id);
         }
 

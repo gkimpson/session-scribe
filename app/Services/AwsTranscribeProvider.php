@@ -6,6 +6,7 @@ use App\Contracts\TranscriptionProvider;
 use App\Enums\TranscriptionJobStatus;
 use App\Models\Recording;
 use App\Support\TranscriptionJobResult;
+use Aws\Exception\AwsException;
 use Aws\TranscribeService\TranscribeServiceClient;
 use Illuminate\Support\Str;
 
@@ -42,7 +43,14 @@ class AwsTranscribeProvider implements TranscriptionProvider
             ];
         }
 
-        $this->client->startTranscriptionJob($job);
+        try {
+            $this->client->startTranscriptionJob($job);
+        } catch (AwsException $exception) {
+            // A retry after the job already started. The name is deterministic.
+            if ($exception->getAwsErrorCode() !== 'ConflictException') {
+                throw $exception;
+            }
+        }
 
         return $jobName;
     }

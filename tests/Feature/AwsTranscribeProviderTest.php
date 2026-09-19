@@ -2,6 +2,7 @@
 
 use App\Models\Recording;
 use App\Services\AwsTranscribeProvider;
+use Aws\Exception\AwsException;
 use Aws\Result;
 use Aws\TranscribeService\TranscribeServiceClient;
 use GuzzleHttp\Promise\Create;
@@ -79,3 +80,26 @@ it('reads the plain transcript location when redaction was off', function () {
     expect($result->transcriptKey)->toBe('case-event-transcripts/x.json')
         ->and($result->redacted)->toBeFalse();
 });
+
+it('treats a job that already exists as started', function () {
+    $recording = Recording::factory()->make();
+    $client = new TranscribeServiceClient([
+        'version' => 'latest',
+        'region' => 'eu-west-2',
+        'credentials' => ['key' => 'k', 'secret' => 's'],
+        'handler' => fn ($command) => Create::rejectionFor(new AwsException('conflict', $command, ['code' => 'ConflictException'])),
+    ]);
+
+    expect((new AwsTranscribeProvider($client))->start($recording))->toBe("case-event-{$recording->id}");
+});
+
+it('still throws for other Transcribe errors', function () {
+    $client = new TranscribeServiceClient([
+        'version' => 'latest',
+        'region' => 'eu-west-2',
+        'credentials' => ['key' => 'k', 'secret' => 's'],
+        'handler' => fn ($command) => Create::rejectionFor(new AwsException('bad', $command, ['code' => 'BadRequestException'])),
+    ]);
+
+    (new AwsTranscribeProvider($client))->start(Recording::factory()->make());
+})->throws(AwsException::class);

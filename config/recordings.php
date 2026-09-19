@@ -34,6 +34,9 @@ return [
         'model_id' => env('RECORDINGS_SUMMARY_MODEL_ID', 'amazon.nova-lite-v1:0'),
         'region' => env('RECORDINGS_SUMMARY_REGION', 'eu-west-2'),
         'prompt_version' => 1,
+
+        // About 4 hours of speech. Anything longer is refused, not truncated.
+        'max_transcript_characters' => 200_000,
     ],
 
     'max_bytes' => 250 * 1024 * 1024,
