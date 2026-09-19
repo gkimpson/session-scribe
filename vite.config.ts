@@ -29,6 +29,8 @@ export default defineConfig({
         }),
         wayfinder({
             formVariants: true,
+            // Vercel has no PHP. The generated files are committed instead.
+            command: process.env.VERCEL ? 'true' : undefined,
         }),
     ]),
     server: {

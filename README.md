@@ -35,6 +35,8 @@ php artisan queue:work
 
 Open [Session Scribe](http://session-scribe.test) through Herd. Run `npm run build` to compile frontend assets without the Vite development process.
 
+Wayfinder's generated route and controller helpers in `resources/js/routes/`, `resources/js/actions/`, and `resources/js/wayfinder/` are committed. Regenerate and commit them when routes change. Vercel builds use these committed files because PHP is unavailable there.
+
 ## Checks
 
 ```sh
