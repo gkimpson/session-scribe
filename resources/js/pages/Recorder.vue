@@ -174,6 +174,13 @@ function formatDuration(seconds: number): string {
     return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+function formatStarted(timestamp: number): string {
+    return new Intl.DateTimeFormat('en-GB', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    }).format(new Date(timestamp));
+}
+
 function formatSize(bytes: number): string {
     return bytes < 1024 * 1024
         ? `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -257,6 +264,36 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
                     >. You can record a new one below.
                 </FwbAlert>
 
+                <FwbAlert
+                    v-if="flow.recoverable && flow.status === 'idle'"
+                    type="warning"
+                    class="border-ink border-2"
+                >
+                    <h2 class="mb-2 text-lg font-extrabold">
+                        Unfinished recording found
+                    </h2>
+                    <p class="mb-3 max-w-[62ch]">
+                        A recording from
+                        {{ formatStarted(flow.recoverable.startedAt) }} ({{
+                            formatDuration(flow.recoverable.elapsedSeconds)
+                        }}, {{ formatSize(flow.recoverable.sizeBytes) }}) was
+                        never uploaded. The page may have closed or lost
+                        connection part way through. It is still saved on this
+                        device.
+                    </p>
+                    <div class="flex flex-wrap gap-3">
+                        <FwbButton @click="flow.recover()">
+                            Recover and upload
+                        </FwbButton>
+                        <FwbButton
+                            color="light"
+                            @click="flow.discardRecoverable()"
+                        >
+                            Discard it
+                        </FwbButton>
+                    </div>
+                </FwbAlert>
+
                 <section
                     v-if="flow.status === 'idle'"
                     class="flex flex-col gap-5"
@@ -324,6 +361,13 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
                         <p class="text-ink-soft max-w-[62ch] text-[15px]">
                             The microphone is live. Stop when the session ends.
                             The audio uploads straight away.
+                        </p>
+                        <p class="text-ink-muted max-w-[62ch] text-[13px]">
+                            {{
+                                flow.backupActive
+                                    ? 'A copy is saved on this device as you go, so a crash or reload will not lose the recording.'
+                                    : 'Crash recovery is not available in this browser. Keep this page open until the upload finishes.'
+                            }}
                         </p>
                         <div>
                             <FwbButton

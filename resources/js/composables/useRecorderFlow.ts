@@ -1,4 +1,9 @@
-import { computed, onBeforeUnmount, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import {
+    createIndexedDbBackend,
+    createRecordingStore,
+} from '@/lib/recordingStore';
+import type { RecoverableRecording } from '@/lib/recordingStore';
 import {
     fetchRecording,
     fetchSummary,
@@ -41,6 +46,7 @@ export type FailStage = 'record' | 'upload' | 'transcribe';
 const POLL_MS = 3000;
 const SUMMARY_POLL_MS = 2000;
 const MAX_POLL_ERRORS = 5;
+const BACKUP_TOUCH_EVERY_SECONDS = 5;
 
 export const MAX_SECONDS = 60 * 60;
 export const MAX_BYTES = 250 * 1024 * 1024;
@@ -119,6 +125,29 @@ export function useRecorderFlow(initial?: {
     let recorder: MediaRecorder | null = null;
     let chunks: Blob[] = [];
     let extension = 'webm';
+
+    // A copy of the recording is kept on this device until the upload is
+    // confirmed, so a crash or reload doesn't lose it.
+    const store = createRecordingStore(createIndexedDbBackend());
+    let sessionId: string | null = null;
+    const backupActive = ref(false);
+    const recoverable = ref<RecoverableRecording | null>(null);
+
+    async function discardSession(): Promise<void> {
+        const id = sessionId;
+        sessionId = null;
+        backupActive.value = false;
+
+        if (id) {
+            await store.discard(id);
+        }
+    }
+
+    async function loadRecoverable(): Promise<void> {
+        const found = await store.unfinished();
+        recoverable.value =
+            found.find((session) => session.id !== sessionId) ?? null;
+    }
 
     function clearElapsedTimer(): void {
         if (elapsedTimer) {
@@ -306,10 +335,20 @@ export function useRecorderFlow(initial?: {
 
         chunks = [];
         extension = format.extension;
+        const backupId = await store.begin({
+            mimeType: format.mimeType,
+            extension: format.extension,
+        });
+        sessionId = backupId;
+        backupActive.value = backupId !== null;
+
         recorder = new MediaRecorder(stream, { mimeType: format.mimeType });
         recorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
                 chunks.push(event.data);
+                if (backupId) {
+                    store.addChunk(backupId, event.data);
+                }
             }
         };
         recorder.onerror = () =>
@@ -320,6 +359,9 @@ export function useRecorderFlow(initial?: {
         recorder.start(1000);
         elapsedTimer = setInterval(() => {
             elapsed.value += 1;
+            if (backupId && elapsed.value % BACKUP_TOUCH_EVERY_SECONDS === 0) {
+                store.touch(backupId, elapsed.value);
+            }
             if (elapsed.value >= MAX_SECONDS) {
                 stop();
             }
@@ -337,13 +379,18 @@ export function useRecorderFlow(initial?: {
             const blob = new Blob(chunks, { type: active.mimeType });
             chunks = [];
             if (blob.size === 0) {
+                void discardSession();
                 fail('record', 'No audio was captured, so nothing was saved.');
             } else if (blob.size > MAX_BYTES) {
+                void discardSession();
                 fail(
                     'record',
                     'The recording is over the 250 MB limit and was not saved.',
                 );
             } else {
+                if (sessionId) {
+                    store.markStopped(sessionId, elapsed.value);
+                }
                 clearAudio();
                 audio.value = {
                     blob,
@@ -376,6 +423,7 @@ export function useRecorderFlow(initial?: {
                 progress.value = percent;
             });
             progress.value = 100;
+            void discardSession().then(loadRecoverable);
             beginPolling();
         } catch {
             fail(
@@ -383,6 +431,61 @@ export function useRecorderFlow(initial?: {
                 'The upload did not finish. The audio is still on this device.',
             );
         }
+    }
+
+    /** Picks up a recording that was never uploaded, for example after a crash. */
+    async function recover(): Promise<void> {
+        const target = recoverable.value;
+        if (!target) {
+            return;
+        }
+
+        const blob = await store.assemble(target.id);
+
+        if (!blob) {
+            await store.discard(target.id);
+            recoverable.value = null;
+            fail('record', 'The saved recording could not be read.');
+
+            return;
+        }
+
+        if (blob.size > MAX_BYTES) {
+            await store.discard(target.id);
+            recoverable.value = null;
+            fail(
+                'record',
+                'The saved recording is over the 250 MB limit and was not uploaded.',
+            );
+
+            return;
+        }
+
+        clearAudio();
+        sessionId = target.id;
+        backupActive.value = true;
+        recoverable.value = null;
+        consent.value = true;
+        elapsed.value = target.elapsedSeconds;
+        audio.value = {
+            blob,
+            url: URL.createObjectURL(blob),
+            mimeType: target.mimeType,
+            extension: target.extension,
+            sizeBytes: blob.size,
+            durationSeconds: Math.max(1, target.elapsedSeconds),
+        };
+        void upload();
+    }
+
+    async function discardRecoverable(): Promise<void> {
+        const target = recoverable.value;
+        if (!target) {
+            return;
+        }
+
+        await store.discard(target.id);
+        await loadRecoverable();
     }
 
     function beginPolling(): void {
@@ -449,6 +552,9 @@ export function useRecorderFlow(initial?: {
     }
 
     function reset(): void {
+        // The local copy stays if it was never uploaded, so it can be recovered.
+        sessionId = null;
+        backupActive.value = false;
         clearSummaryTimers();
         summaries.value = {};
         transcriptId.value = null;
@@ -465,7 +571,14 @@ export function useRecorderFlow(initial?: {
         turns.value = [];
         failStage.value = null;
         failReason.value = '';
+        void loadRecoverable();
     }
+
+    onMounted(() => {
+        if (!initial) {
+            void loadRecoverable();
+        }
+    });
 
     if (initial) {
         stored.value = { id: initial.recordingId, s3Key: initial.s3Key };
@@ -506,6 +619,10 @@ export function useRecorderFlow(initial?: {
         summaries,
         currentSummary,
         summarise,
+        recoverable,
+        backupActive,
+        recover,
+        discardRecoverable,
         waitedSeconds,
         record,
         stop,
