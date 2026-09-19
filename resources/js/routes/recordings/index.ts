@@ -1,5 +1,86 @@
 import { queryParams, type RouteQueryOptions, type RouteDefinition, type RouteFormDefinition, applyUrlDefaults } from './../../wayfinder'
 /**
+* @see \App\Http\Controllers\RecordingIndexController::__invoke
+* @see app/Http/Controllers/RecordingIndexController.php:18
+* @route '/recordings'
+*/
+export const index = (options?: RouteQueryOptions): RouteDefinition<'get'> => ({
+    url: index.url(options),
+    method: 'get',
+})
+
+index.definition = {
+    methods: ["get","head"],
+    url: '/recordings',
+} satisfies RouteDefinition<["get","head"]>
+
+/**
+* @see \App\Http\Controllers\RecordingIndexController::__invoke
+* @see app/Http/Controllers/RecordingIndexController.php:18
+* @route '/recordings'
+*/
+index.url = (options?: RouteQueryOptions) => {
+    return index.definition.url + queryParams(options)
+}
+
+/**
+* @see \App\Http\Controllers\RecordingIndexController::__invoke
+* @see app/Http/Controllers/RecordingIndexController.php:18
+* @route '/recordings'
+*/
+index.get = (options?: RouteQueryOptions): RouteDefinition<'get'> => ({
+    url: index.url(options),
+    method: 'get',
+})
+
+/**
+* @see \App\Http\Controllers\RecordingIndexController::__invoke
+* @see app/Http/Controllers/RecordingIndexController.php:18
+* @route '/recordings'
+*/
+index.head = (options?: RouteQueryOptions): RouteDefinition<'head'> => ({
+    url: index.url(options),
+    method: 'head',
+})
+
+/**
+* @see \App\Http\Controllers\RecordingIndexController::__invoke
+* @see app/Http/Controllers/RecordingIndexController.php:18
+* @route '/recordings'
+*/
+const indexForm = (options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
+    action: index.url(options),
+    method: 'get',
+})
+
+/**
+* @see \App\Http\Controllers\RecordingIndexController::__invoke
+* @see app/Http/Controllers/RecordingIndexController.php:18
+* @route '/recordings'
+*/
+indexForm.get = (options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
+    action: index.url(options),
+    method: 'get',
+})
+
+/**
+* @see \App\Http\Controllers\RecordingIndexController::__invoke
+* @see app/Http/Controllers/RecordingIndexController.php:18
+* @route '/recordings'
+*/
+indexForm.head = (options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
+    action: index.url({
+        [options?.mergeQuery ? 'mergeQuery' : 'query']: {
+            _method: 'HEAD',
+            ...(options?.query ?? options?.mergeQuery ?? {}),
+        }
+    }),
+    method: 'get',
+})
+
+index.form = indexForm
+
+/**
 * @see \App\Http\Controllers\RecordingController::store
 * @see app/Http/Controllers/RecordingController.php:14
 * @route '/recordings'
@@ -241,6 +322,7 @@ showForm.head = (args: { recording: string | { id: string } } | [recording: stri
 show.form = showForm
 
 const recordings = {
+    index: Object.assign(index, index),
     store: Object.assign(store, store),
     upload: Object.assign(upload, upload),
     show: Object.assign(show, show),

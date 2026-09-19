@@ -2,10 +2,13 @@
 
 use App\Http\Controllers\RecorderController;
 use App\Http\Controllers\RecordingController;
+use App\Http\Controllers\RecordingIndexController;
 use App\Http\Controllers\RecordingUploadController;
 use App\Http\Controllers\SummaryController;
 use App\Http\Controllers\TranscriptSummaryController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('recordings', RecordingIndexController::class)->name('recordings.index');
 
 Route::get('/{transcriptId?}', RecorderController::class)
     ->whereUuid('transcriptId')

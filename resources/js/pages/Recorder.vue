@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     FwbAlert,
     FwbBadge,
@@ -19,6 +19,7 @@ import {
     useRecorderFlow,
 } from '@/composables/useRecorderFlow';
 import { home } from '@/routes';
+import { index as recordingsIndex } from '@/routes/recordings';
 
 const props = defineProps<{
     transcript: {
@@ -233,6 +234,11 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
                 <FwbButton color="light" size="sm" @click="newRecording()">
                     New recording
                 </FwbButton>
+                <Link :href="recordingsIndex().url">
+                    <FwbButton color="light" size="sm" class="w-full">
+                        All recordings
+                    </FwbButton>
+                </Link>
             </div>
         </aside>
 
