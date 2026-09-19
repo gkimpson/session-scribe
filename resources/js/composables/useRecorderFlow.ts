@@ -1,6 +1,16 @@
-import { onBeforeUnmount, reactive, ref } from 'vue';
-import { fetchRecording, uploadRecording } from '@/lib/recordingUpload';
-import type { TranscriptTurn } from '@/lib/recordingUpload';
+import { computed, onBeforeUnmount, reactive, ref } from 'vue';
+import {
+    fetchRecording,
+    fetchSummary,
+    requestSummary,
+    toSummaryView,
+    uploadRecording,
+} from '@/lib/recordingUpload';
+import type {
+    SummaryLevel,
+    SummaryView,
+    TranscriptTurn,
+} from '@/lib/recordingUpload';
 
 export type RecorderStatus =
     | 'idle'
@@ -28,6 +38,7 @@ export interface StoredRecording {
 export type FailStage = 'record' | 'upload' | 'transcribe';
 
 const POLL_MS = 3000;
+const SUMMARY_POLL_MS = 2000;
 const MAX_POLL_ERRORS = 5;
 
 export const MAX_SECONDS = 60 * 60;
@@ -71,10 +82,12 @@ export const stepOrder: RecorderStatus[] = [
  * finishes. Summaries come in later.
  */
 export function useRecorderFlow(initial?: {
+    id: number;
     recordingId: string;
     s3Key: string;
     turns: TranscriptTurn[];
     redacted: boolean;
+    summaries: Parameters<typeof toSummaryView>[0][];
 }) {
     const status = ref<RecorderStatus>('idle');
     const consent = ref(false);
@@ -87,6 +100,15 @@ export function useRecorderFlow(initial?: {
     const turns = ref<TranscriptTurn[]>([]);
     const waitedSeconds = ref(0);
     const redacted = ref(true);
+    const transcriptId = ref<number | null>(null);
+    const detail = ref<SummaryLevel>('normal');
+    const summaries = ref<Partial<Record<SummaryLevel, SummaryView>>>({});
+    const currentSummary = computed(
+        () => summaries.value[detail.value] ?? null,
+    );
+    const summaryTimers: Partial<
+        Record<SummaryLevel, ReturnType<typeof setTimeout>>
+    > = {};
 
     let elapsedTimer: ReturnType<typeof setInterval> | null = null;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -112,6 +134,88 @@ export function useRecorderFlow(initial?: {
         if (waitTimer) {
             clearInterval(waitTimer);
             waitTimer = null;
+        }
+    }
+
+    function clearSummaryTimers(): void {
+        (Object.keys(summaryTimers) as SummaryLevel[]).forEach((level) => {
+            clearTimeout(summaryTimers[level]);
+            delete summaryTimers[level];
+        });
+    }
+
+    function failSummary(level: SummaryLevel, reason: string): void {
+        summaries.value[level] = {
+            id: summaries.value[level]?.id ?? 0,
+            level,
+            state: 'failed',
+            sections: null,
+            failureReason: reason,
+        };
+    }
+
+    function pollSummary(level: SummaryLevel, errors = 0): void {
+        summaryTimers[level] = setTimeout(async () => {
+            const current = summaries.value[level];
+            if (!current || ['complete', 'failed'].includes(current.state)) {
+                return;
+            }
+
+            try {
+                summaries.value[level] = await fetchSummary(current.id);
+            } catch {
+                if (errors + 1 >= MAX_POLL_ERRORS) {
+                    failSummary(
+                        level,
+                        'Lost contact with the server while waiting for the summary.',
+                    );
+
+                    return;
+                }
+                pollSummary(level, errors + 1);
+
+                return;
+            }
+
+            if (
+                !['complete', 'failed'].includes(
+                    summaries.value[level]?.state ?? '',
+                )
+            ) {
+                pollSummary(level);
+            }
+        }, SUMMARY_POLL_MS);
+    }
+
+    async function summarise(): Promise<void> {
+        const level = detail.value;
+        const existing = summaries.value[level];
+
+        if (
+            transcriptId.value === null ||
+            existing?.state === 'complete' ||
+            existing?.state === 'queued' ||
+            existing?.state === 'summarising'
+        ) {
+            return;
+        }
+
+        summaries.value[level] = {
+            id: existing?.id ?? 0,
+            level,
+            state: 'queued',
+            sections: null,
+            failureReason: null,
+        };
+
+        try {
+            const view = await requestSummary(transcriptId.value, level);
+            summaries.value[level] = view;
+            if (!['complete', 'failed'].includes(view.state)) {
+                pollSummary(level);
+            }
+        } catch {
+            failSummary(level, 'The summary could not be started.');
         }
     }
 
@@ -297,6 +401,7 @@ export function useRecorderFlow(initial?: {
                 clearPollTimer();
                 turns.value = result.turns ?? [];
                 redacted.value = result.redacted ?? true;
+                transcriptId.value = result.transcriptId;
                 status.value = 'ready';
 
                 return;
@@ -338,6 +443,10 @@ export function useRecorderFlow(initial?: {
     }
 
     function reset(): void {
+        clearSummaryTimers();
+        summaries.value = {};
+        transcriptId.value = null;
+        detail.value = 'normal';
         clearElapsedTimer();
         clearPollTimer();
         stopStream();
@@ -356,10 +465,19 @@ export function useRecorderFlow(initial?: {
         stored.value = { id: initial.recordingId, s3Key: initial.s3Key };
         turns.value = initial.turns;
         redacted.value = initial.redacted;
+        transcriptId.value = initial.id;
+        initial.summaries.forEach((payload) => {
+            const view = toSummaryView(payload);
+            summaries.value[view.level] = view;
+            if (!['complete', 'failed'].includes(view.state)) {
+                pollSummary(view.level);
+            }
+        });
         status.value = 'ready';
     }
 
     onBeforeUnmount(() => {
+        clearSummaryTimers();
         clearElapsedTimer();
         clearPollTimer();
         stopStream();
@@ -377,6 +495,11 @@ export function useRecorderFlow(initial?: {
         stored,
         turns,
         redacted,
+        transcriptId,
+        detail,
+        summaries,
+        currentSummary,
+        summarise,
         waitedSeconds,
         record,
         stop,

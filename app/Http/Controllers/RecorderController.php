@@ -23,6 +23,12 @@ class RecorderController extends Controller
                 's3Key' => $transcript->s3_key,
                 'turns' => $transcript->turns ?? [],
                 'redacted' => $transcript->redacted,
+                'summaries' => $transcript->summaries()
+                    ->where('model_id', config('recordings.summary.model_id'))
+                    ->where('prompt_version', config('recordings.summary.prompt_version'))
+                    ->get()
+                    ->map(fn ($summary) => SummaryController::payload($summary))
+                    ->all(),
             ] : null,
             'missingTranscriptId' => $requestedId !== null && $transcript === null
                 ? (string) $requestedId

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import {
     FwbAlert,
     FwbBadge,
     FwbButton,
+    FwbButtonGroup,
     FwbCard,
     FwbCheckbox,
     FwbListGroup,
@@ -17,6 +18,7 @@ import {
     statusLabels,
     useRecorderFlow,
 } from '@/composables/useRecorderFlow';
+import { home } from '@/routes';
 
 const props = defineProps<{
     transcript: {
@@ -25,6 +27,13 @@ const props = defineProps<{
         s3Key: string;
         turns: { speaker: string; text: string }[];
         redacted: boolean;
+        summaries: {
+            id: number;
+            level: 'brief' | 'normal' | 'detailed';
+            state: string;
+            sections: { heading: string; body: string }[] | null;
+            failure_reason: string | null;
+        }[];
     } | null;
     missingTranscriptId: string | null;
 }>();
@@ -34,6 +43,63 @@ const flow = useRecorderFlow(props.transcript ?? undefined);
 const isFailure = computed(
     () => flow.status === 'failed' || flow.status === 'blocked',
 );
+
+const summaryLevels = [
+    {
+        value: 'brief',
+        label: 'Brief',
+        hint: 'A few lines per section. Only the key points.',
+    },
+    {
+        value: 'normal',
+        label: 'Normal',
+        hint: 'Full sentences covering the main points.',
+    },
+    {
+        value: 'detailed',
+        label: 'Detailed',
+        hint: 'Keeps specifics, reasons and follow-up wording.',
+    },
+] as const;
+
+const summaryHint = computed(
+    () => summaryLevels.find((level) => level.value === flow.detail)?.hint,
+);
+
+const summaryBusy = computed(() =>
+    ['queued', 'summarising'].includes(flow.currentSummary?.state ?? ''),
+);
+
+function isBaseUrl(): boolean {
+    return window.location.href === `${window.location.origin}/`;
+}
+
+function stripUrl(): void {
+    if (!isBaseUrl()) {
+        window.history.replaceState(window.history.state, '', '/');
+    }
+}
+
+/**
+ * Always ends on the bare base URL, dropping any path id, query string or
+ * hash. Inertia does the visit so the page props reset with it, and the
+ * history fallback covers anything the visit leaves behind.
+ */
+function newRecording(): void {
+    flow.reset();
+
+    if (isBaseUrl()) {
+        return;
+    }
+
+    router.visit(home().url, {
+        replace: true,
+        preserveState: true,
+        preserveScroll: true,
+        onFinish: stripUrl,
+    });
+    stripUrl();
+}
 
 const elapsedText = computed(() => formatDuration(flow.elapsed));
 const waitedText = computed(() => formatDuration(flow.waitedSeconds));
@@ -157,7 +223,7 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
             </div>
 
             <div class="border-ink flex flex-col gap-2.5 border-t-2 pt-4">
-                <FwbButton color="light" size="sm" @click="flow.reset()">
+                <FwbButton color="light" size="sm" @click="newRecording()">
                     New recording
                 </FwbButton>
             </div>
@@ -433,6 +499,132 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
                     >
                         No speech was found in this recording.
                     </p>
+                </section>
+
+                <section
+                    v-if="flow.status === 'ready' && flow.transcriptId !== null"
+                    class="border-ink flex flex-col gap-4 border-t-2 pt-6"
+                >
+                    <div>
+                        <div :class="[kicker, 'mb-2.5']">Summary detail</div>
+                        <FwbButtonGroup
+                            role="radiogroup"
+                            aria-label="Summary detail"
+                        >
+                            <FwbButton
+                                v-for="level in summaryLevels"
+                                :key="level.value"
+                                role="radio"
+                                :aria-checked="flow.detail === level.value"
+                                :color="
+                                    flow.detail === level.value
+                                        ? 'dark'
+                                        : 'light'
+                                "
+                                @click="flow.detail = level.value"
+                            >
+                                {{ level.label }}
+                            </FwbButton>
+                        </FwbButtonGroup>
+                        <p
+                            class="text-ink-muted mt-2.5 max-w-[62ch] text-[13px]"
+                        >
+                            {{ summaryHint }}
+                        </p>
+                    </div>
+                    <div>
+                        <FwbButton
+                            size="lg"
+                            :disabled="summaryBusy"
+                            @click="flow.summarise()"
+                        >
+                            Summary
+                        </FwbButton>
+                    </div>
+
+                    <FwbCard
+                        v-if="summaryBusy"
+                        :class="`${card} flex flex-col gap-4 px-6 py-5`"
+                    >
+                        <div class="flex items-center gap-3.5">
+                            <FwbSpinner color="red" size="8" />
+                            <span class="text-lg font-extrabold"
+                                >Generating summary</span
+                            >
+                        </div>
+                        <div class="flex flex-col gap-2.5" aria-hidden="true">
+                            <div
+                                v-for="width in ['92%', '76%', '84%', '58%']"
+                                :key="width"
+                                class="bg-line h-3 animate-pulse"
+                                :style="{ width }"
+                            ></div>
+                        </div>
+                    </FwbCard>
+
+                    <FwbAlert
+                        v-else-if="flow.currentSummary?.state === 'failed'"
+                        type="danger"
+                        class="border-accent border-2"
+                    >
+                        <h3
+                            class="text-accent-strong mb-2 text-lg font-extrabold"
+                        >
+                            The summary was not generated
+                        </h3>
+                        <p class="mb-3 max-w-[62ch]">
+                            {{ flow.currentSummary.failureReason }} The
+                            transcript is safe. Choose Summary to try again.
+                        </p>
+                    </FwbAlert>
+
+                    <div
+                        v-else-if="
+                            flow.currentSummary?.state === 'complete' &&
+                            flow.currentSummary.sections
+                        "
+                        class="flex flex-col"
+                    >
+                        <div
+                            class="border-ink bg-panel flex flex-wrap items-baseline justify-between gap-4 border-2 px-5 py-4"
+                        >
+                            <div class="flex flex-wrap items-baseline gap-3">
+                                <span
+                                    class="bg-accent px-2 py-1 text-xs font-extrabold tracking-widest text-white uppercase"
+                                    >Draft</span
+                                >
+                                <h2 class="text-[22px] font-extrabold">
+                                    Summary
+                                </h2>
+                            </div>
+                            <span
+                                class="text-ink-soft text-[13px] font-semibold capitalize"
+                                >{{ flow.currentSummary.level }} detail</span
+                            >
+                        </div>
+                        <div
+                            class="border-ink bg-well border-2 border-t-0 px-5 pt-2 pb-5"
+                        >
+                            <div
+                                v-for="section in flow.currentSummary.sections"
+                                :key="section.heading"
+                                class="border-line flex flex-col gap-2 border-b py-5"
+                            >
+                                <h3 :class="kicker">{{ section.heading }}</h3>
+                                <p
+                                    class="max-w-[68ch] text-[15px] leading-relaxed"
+                                >
+                                    {{ section.body }}
+                                </p>
+                            </div>
+                            <p
+                                class="text-ink-muted mt-4 max-w-[62ch] text-[13px]"
+                            >
+                                This is an automatic draft. Read it against the
+                                transcript before you use it.
+                            </p>
+                        </div>
+                    </div>
                 </section>
 
                 <p

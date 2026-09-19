@@ -3,9 +3,12 @@
 namespace App\Providers;
 
 use App\Contracts\RecordingStorage;
+use App\Contracts\SummaryGenerator;
 use App\Contracts\TranscriptionProvider;
 use App\Services\AwsTranscribeProvider;
+use App\Services\BedrockSummaryGenerator;
 use App\Services\S3RecordingStorage;
+use Aws\BedrockRuntime\BedrockRuntimeClient;
 use Aws\TranscribeService\TranscribeServiceClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -26,6 +29,17 @@ class AppServiceProvider extends ServiceProvider
             new TranscribeServiceClient([
                 'version' => 'latest',
                 'region' => config('services.aws.region'),
+                'credentials' => [
+                    'key' => config('services.aws.key'),
+                    'secret' => config('services.aws.secret'),
+                ],
+            ]),
+        ));
+
+        $this->app->bind(SummaryGenerator::class, fn () => new BedrockSummaryGenerator(
+            new BedrockRuntimeClient([
+                'version' => 'latest',
+                'region' => config('recordings.summary.region'),
                 'credentials' => [
                     'key' => config('services.aws.key'),
                     'secret' => config('services.aws.secret'),

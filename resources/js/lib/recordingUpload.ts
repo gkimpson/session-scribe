@@ -1,4 +1,6 @@
 import { show, store, upload } from '@/routes/recordings';
+import { show as showSummary } from '@/routes/summaries';
+import { store as storeSummary } from '@/routes/transcripts/summaries';
 
 interface CreatedRecording {
     id: string;
@@ -98,6 +100,7 @@ export interface RecordingStatus {
     failureReason: string | null;
     turns: TranscriptTurn[] | null;
     redacted: boolean | null;
+    transcriptId: number | null;
 }
 
 export async function fetchRecording(id: string): Promise<RecordingStatus> {
@@ -114,6 +117,7 @@ export async function fetchRecording(id: string): Promise<RecordingStatus> {
         failure_reason: string | null;
         turns: TranscriptTurn[] | null;
         redacted: boolean | null;
+        transcript_id: number | null;
     };
 
     return {
@@ -121,5 +125,62 @@ export async function fetchRecording(id: string): Promise<RecordingStatus> {
         failureReason: data.failure_reason,
         turns: data.turns,
         redacted: data.redacted,
+        transcriptId: data.transcript_id,
     };
+}
+
+export type SummaryLevel = 'brief' | 'normal' | 'detailed';
+
+export interface SummarySection {
+    heading: string;
+    body: string;
+}
+
+export interface SummaryView {
+    id: number;
+    level: SummaryLevel;
+    state: string;
+    sections: SummarySection[] | null;
+    failureReason: string | null;
+}
+
+interface SummaryPayload {
+    id: number;
+    level: SummaryLevel;
+    state: string;
+    sections: SummarySection[] | null;
+    failure_reason: string | null;
+}
+
+export function toSummaryView(payload: SummaryPayload): SummaryView {
+    return {
+        id: payload.id,
+        level: payload.level,
+        state: payload.state,
+        sections: payload.sections,
+        failureReason: payload.failure_reason,
+    };
+}
+
+export async function requestSummary(
+    transcriptId: number,
+    level: SummaryLevel,
+): Promise<SummaryView> {
+    return toSummaryView(
+        await postJson<SummaryPayload>(storeSummary(transcriptId).url, {
+            level,
+        }),
+    );
+}
+
+export async function fetchSummary(id: number): Promise<SummaryView> {
+    const response = await fetch(showSummary(id).url, {
+        headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+    }
+
+    return toSummaryView((await response.json()) as SummaryPayload);
 }

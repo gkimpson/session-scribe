@@ -24,6 +24,18 @@ return [
 
     'redact_pii' => (bool) env('RECORDINGS_REDACT_PII', true),
 
+    /*
+    | Bedrock summaries. The IAM policy only allows this model in eu-west-2.
+    | Bump prompt_version whenever the prompts change, so old summaries stay
+    | distinct from new ones.
+    */
+
+    'summary' => [
+        'model_id' => env('RECORDINGS_SUMMARY_MODEL_ID', 'amazon.nova-lite-v1:0'),
+        'region' => env('RECORDINGS_SUMMARY_REGION', 'eu-west-2'),
+        'prompt_version' => 1,
+    ],
+
     'max_bytes' => 250 * 1024 * 1024,
 
     'max_seconds' => 60 * 60,
