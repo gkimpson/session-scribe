@@ -1,19 +1,11 @@
-import { computed, onBeforeUnmount, reactive, ref } from 'vue';
-import { fakeSummaries, fakeTranscript } from '@/lib/fakeConsultation';
-import type {
-    DetailLevel,
-    SummarySection,
-    TranscriptTurn,
-} from '@/lib/fakeConsultation';
+import { onBeforeUnmount, reactive, ref } from 'vue';
+import { uploadRecording } from '@/lib/recordingUpload';
 
 export type RecorderStatus =
     | 'idle'
     | 'recording'
     | 'uploading'
-    | 'transcribing'
-    | 'ready'
-    | 'summarising'
-    | 'summary'
+    | 'uploaded'
     | 'failed'
     | 'blocked';
 
@@ -25,6 +17,13 @@ export interface CapturedAudio {
     sizeBytes: number;
     durationSeconds: number;
 }
+
+export interface StoredRecording {
+    id: string;
+    s3Key: string;
+}
+
+export type FailStage = 'record' | 'upload';
 
 export const MAX_SECONDS = 60 * 60;
 export const MAX_BYTES = 250 * 1024 * 1024;
@@ -44,16 +43,11 @@ function pickMimeType(): { mimeType: string; extension: string } | null {
     );
 }
 
-export type FailStage = 'record' | 'upload' | 'summary';
-
 export const statusLabels: Record<RecorderStatus, string> = {
     idle: 'Not started',
     recording: 'Recording',
     uploading: 'Uploading',
-    transcribing: 'Transcribing',
-    ready: 'Transcript ready',
-    summarising: 'Generating summary',
-    summary: 'Transcript ready',
+    uploaded: 'Saved to S3',
     failed: 'Failed',
     blocked: 'Failed',
 };
@@ -61,52 +55,41 @@ export const statusLabels: Record<RecorderStatus, string> = {
 export const stepOrder: RecorderStatus[] = [
     'recording',
     'uploading',
-    'transcribing',
-    'ready',
-    'summarising',
+    'uploaded',
 ];
 
 /**
- * Simulated recorder state machine. The microphone is real. Upload,
- * transcription and summary are timers until the AWS pipeline is wired in.
+ * Recorder state machine. The microphone capture and the upload to S3 are
+ * real. Transcription and summaries come in later as real jobs.
  */
-export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
+export function useRecorderFlow() {
     const status = ref<RecorderStatus>('idle');
     const consent = ref(false);
     const elapsed = ref(0);
     const progress = ref(0);
-    const detail = ref<DetailLevel>('Normal');
-    const sections = ref<SummarySection[]>([]);
-    const generatedAt = ref('');
     const failStage = ref<FailStage | null>(null);
     const failReason = ref('');
+    const audio = ref<CapturedAudio | null>(null);
+    const stored = ref<StoredRecording | null>(null);
 
-    const transcript = computed<TranscriptTurn[]>(() =>
-        ['ready', 'summarising', 'summary'].includes(status.value)
-            ? fakeTranscript
-            : [],
-    );
-
-    const timers: Record<string, ReturnType<typeof setInterval>> = {};
+    let elapsedTimer: ReturnType<typeof setInterval> | null = null;
     let stream: MediaStream | null = null;
     let recorder: MediaRecorder | null = null;
     let chunks: Blob[] = [];
     let extension = 'webm';
-    const audio = ref<CapturedAudio | null>(null);
+
+    function clearElapsedTimer(): void {
+        if (elapsedTimer) {
+            clearInterval(elapsedTimer);
+            elapsedTimer = null;
+        }
+    }
 
     function clearAudio(): void {
         if (audio.value) {
             URL.revokeObjectURL(audio.value.url);
         }
         audio.value = null;
-    }
-
-    function clearTimers(): void {
-        Object.values(timers).forEach((id) => {
-            clearInterval(id);
-            clearTimeout(id);
-        });
-        Object.keys(timers).forEach((key) => delete timers[key]);
     }
 
     function stopStream(): void {
@@ -116,7 +99,7 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
     }
 
     function fail(stage: FailStage, reason: string): void {
-        clearTimers();
+        clearElapsedTimer();
         stopStream();
         status.value = 'failed';
         failStage.value = stage;
@@ -124,12 +107,12 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
     }
 
     async function record(): Promise<void> {
-        clearTimers();
+        clearElapsedTimer();
         elapsed.value = 0;
         progress.value = 0;
         failStage.value = null;
         failReason.value = '';
-        sections.value = [];
+        stored.value = null;
         status.value = 'recording';
         clearAudio();
 
@@ -193,7 +176,7 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
                 'The recording stopped unexpectedly. Nothing was saved.',
             );
         recorder.start(1000);
-        timers.elapsed = setInterval(() => {
+        elapsedTimer = setInterval(() => {
             elapsed.value += 1;
             if (elapsed.value >= MAX_SECONDS) {
                 stop();
@@ -202,7 +185,7 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
     }
 
     function stop(): void {
-        clearInterval(timers.elapsed);
+        clearElapsedTimer();
         const active = recorder;
         if (!active || active.state === 'inactive') {
             return;
@@ -228,61 +211,41 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
                     sizeBytes: blob.size,
                     durationSeconds: elapsed.value,
                 };
-                beginUpload(0);
+                void upload();
             }
         };
         active.stop();
         stopStream();
     }
 
-    function beginUpload(from: number): void {
-        clearInterval(timers.upload);
+    async function upload(): Promise<void> {
+        const captured = audio.value;
+        if (!captured) {
+            return;
+        }
+
         status.value = 'uploading';
-        progress.value = from;
+        progress.value = 0;
         failStage.value = null;
         failReason.value = '';
 
-        timers.upload = setInterval(() => {
-            progress.value = Math.min(100, progress.value + 6);
-            if (progress.value < 100) {
-                return;
-            }
-            clearInterval(timers.upload);
-            if (options.simulateFailure) {
-                fail(
-                    'upload',
-                    'The upload stopped before it finished because the connection dropped. The audio is still on this device.',
-                );
-            } else {
-                beginTranscribe();
-            }
-        }, 180);
-    }
-
-    function beginTranscribe(): void {
-        status.value = 'transcribing';
-        timers.transcribe = setTimeout(() => (status.value = 'ready'), 3000);
-    }
-
-    function summarise(): void {
-        status.value = 'summarising';
-        timers.summarise = setTimeout(() => {
-            sections.value = fakeSummaries[detail.value].map((section) => ({
-                ...section,
-            }));
-            generatedAt.value = new Intl.DateTimeFormat('en-GB', {
-                dateStyle: 'long',
-                timeStyle: 'short',
-            }).format(new Date());
-            status.value = 'summary';
-        }, 2400);
+        try {
+            stored.value = await uploadRecording(captured, (percent) => {
+                progress.value = percent;
+            });
+            progress.value = 100;
+            status.value = 'uploaded';
+        } catch {
+            fail(
+                'upload',
+                'The upload did not finish. The audio is still on this device.',
+            );
+        }
     }
 
     function retry(): void {
         if (failStage.value === 'upload') {
-            beginUpload(0);
-        } else if (failStage.value === 'summary') {
-            summarise();
+            void upload();
         } else {
             status.value = 'idle';
             elapsed.value = 0;
@@ -293,21 +256,20 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
     }
 
     function reset(): void {
-        clearTimers();
+        clearElapsedTimer();
         stopStream();
         clearAudio();
         status.value = 'idle';
         consent.value = false;
         elapsed.value = 0;
         progress.value = 0;
-        sections.value = [];
-        generatedAt.value = '';
+        stored.value = null;
         failStage.value = null;
         failReason.value = '';
     }
 
     onBeforeUnmount(() => {
-        clearTimers();
+        clearElapsedTimer();
         stopStream();
         clearAudio();
     });
@@ -317,16 +279,12 @@ export function useRecorderFlow(options: { simulateFailure?: boolean } = {}) {
         consent,
         elapsed,
         progress,
-        detail,
-        sections,
-        generatedAt,
         failStage,
         failReason,
-        transcript,
         audio,
+        stored,
         record,
         stop,
-        summarise,
         retry,
         reset,
     });
