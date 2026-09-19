@@ -2,6 +2,20 @@
 @import 'flowbite/src/themes/default';
 @plugin 'flowbite/plugin';
 
+/*
+ * This design is light only. Flowbite's components carry dark: styles, and by
+ * default Tailwind applies those whenever the OS is in dark mode, which turned
+ * text light grey on our light panels. Now they only apply under a .dark class,
+ * which nothing sets.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+    html {
+        color-scheme: light;
+    }
+}
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../../node_modules/flowbite-vue';

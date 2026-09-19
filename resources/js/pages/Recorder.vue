@@ -322,6 +322,8 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
                     >
                         <FwbCheckbox
                             v-model="flow.consent"
+                            class="text-accent focus:ring-accent border-ink size-5 rounded-none border-2"
+                            label-class="text-ink text-[15px] font-medium"
                             label="I have told everyone taking part about the recording and they agree to it."
                         />
                     </label>
