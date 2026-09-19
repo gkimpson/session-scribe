@@ -40,4 +40,19 @@ class RecordingController extends Controller
             ],
         ], 201);
     }
+
+    public function show(Recording $recording): JsonResponse
+    {
+        $transcript = $recording->state === RecordingState::Ready
+            ? $recording->transcripts()->latest('version')->first()
+            : null;
+
+        return response()->json([
+            'id' => $recording->id,
+            'state' => $recording->state->value,
+            'failure_reason' => $recording->failure_reason,
+            'turns' => $transcript?->turns,
+            'redacted' => $transcript?->redacted,
+        ]);
+    }
 }

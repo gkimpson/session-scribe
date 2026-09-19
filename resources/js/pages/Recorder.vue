@@ -6,7 +6,10 @@ import {
     FwbButton,
     FwbCard,
     FwbCheckbox,
+    FwbListGroup,
+    FwbListGroupItem,
     FwbProgress,
+    FwbSpinner,
 } from 'flowbite-vue';
 import { computed } from 'vue';
 import {
@@ -15,13 +18,25 @@ import {
     useRecorderFlow,
 } from '@/composables/useRecorderFlow';
 
-const flow = useRecorderFlow();
+const props = defineProps<{
+    transcript: {
+        id: number;
+        recordingId: string;
+        s3Key: string;
+        turns: { speaker: string; text: string }[];
+        redacted: boolean;
+    } | null;
+    missingTranscriptId: string | null;
+}>();
+
+const flow = useRecorderFlow(props.transcript ?? undefined);
 
 const isFailure = computed(
     () => flow.status === 'failed' || flow.status === 'blocked',
 );
 
 const elapsedText = computed(() => formatDuration(flow.elapsed));
+const waitedText = computed(() => formatDuration(flow.waitedSeconds));
 
 const steps = computed(() => {
     const activeIndex = stepOrder.indexOf(flow.status);
@@ -29,16 +44,16 @@ const steps = computed(() => {
         flow.status === 'blocked'
             ? 0
             : flow.status === 'failed'
-              ? flow.failStage === 'upload'
-                  ? 1
-                  : 0
+              ? { record: 0, upload: 1, transcribe: 2 }[
+                    flow.failStage ?? 'record'
+                ]
               : -1;
 
     return stepOrder.map((key, index) => {
         let mark = '–';
         if (index === failIndex) {
             mark = '✕';
-        } else if (flow.status === 'uploaded' || index < activeIndex) {
+        } else if (flow.status === 'ready' || index < activeIndex) {
             mark = '✓';
         } else if (index === activeIndex) {
             mark = '●';
@@ -54,16 +69,23 @@ const steps = computed(() => {
     });
 });
 
-const failTitle = computed(() =>
-    flow.failStage === 'upload'
-        ? 'The upload did not finish'
-        : 'The recording was not saved',
+const failTitle = computed(
+    () =>
+        ({
+            upload: 'The upload did not finish',
+            transcribe: 'The transcript was not produced',
+            record: 'The recording was not saved',
+        })[flow.failStage ?? 'record'],
 );
 
-const failNext = computed(() =>
-    flow.failStage === 'upload'
-        ? 'Choose Retry to send it again. Do not close this page until it has uploaded.'
-        : 'Choose Retry to start a new recording.',
+const failNext = computed(
+    () =>
+        ({
+            upload: 'Choose Retry to send it again. Do not close this page until it has uploaded.',
+            transcribe:
+                'The audio is stored. Choose Retry to start a new recording.',
+            record: 'Choose Retry to start a new recording.',
+        })[flow.failStage ?? 'record'],
 );
 
 const announce = computed(() => {
@@ -157,6 +179,18 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
             <div class="sr-only" aria-live="polite">{{ announce }}</div>
 
             <div class="flex max-w-225 flex-col gap-8 p-8">
+                <FwbAlert
+                    v-if="
+                        missingTranscriptId !== null && flow.status === 'idle'
+                    "
+                    type="warning"
+                    class="border-ink border-2"
+                >
+                    No transcript was found with id
+                    <span class="font-mono">{{ missingTranscriptId }}</span
+                    >. You can record a new one below.
+                </FwbAlert>
+
                 <section
                     v-if="flow.status === 'idle'"
                     class="flex flex-col gap-5"
@@ -254,22 +288,36 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
                 </FwbCard>
 
                 <FwbCard
-                    v-if="flow.status === 'uploaded' && flow.stored"
-                    :class="`${card} flex flex-col gap-3 px-6 py-5`"
+                    v-if="flow.status === 'transcribing'"
+                    :class="`${card} flex flex-col gap-4 px-6 py-5`"
                 >
-                    <h2 class="text-xl font-extrabold">Saved to S3</h2>
-                    <dl
-                        class="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1.5 text-[15px]"
-                    >
-                        <dt :class="kicker">Object key</dt>
-                        <dd class="font-mono break-all">
-                            {{ flow.stored.s3Key }}
-                        </dd>
-                        <dt :class="kicker">Recording</dt>
-                        <dd class="font-mono break-all">
-                            {{ flow.stored.id }}
-                        </dd>
-                    </dl>
+                    <div class="flex items-center gap-3.5">
+                        <FwbSpinner color="red" size="8" />
+                        <div class="flex flex-col">
+                            <span class="text-lg font-extrabold"
+                                >Transcribing your recording</span
+                            >
+                            <span class="text-ink-muted text-[13px]"
+                                >Checking every few seconds ·
+                                <span class="tabular-nums">{{
+                                    waitedText
+                                }}</span></span
+                            >
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-2.5" aria-hidden="true">
+                        <div
+                            v-for="width in ['82%', '94%', '64%', '88%', '48%']"
+                            :key="width"
+                            class="bg-line h-3.5 animate-pulse"
+                            :style="{ width }"
+                        ></div>
+                    </div>
+                    <p class="text-ink-muted text-sm">
+                        The audio is saved. This usually takes a minute or two.
+                        You can keep this page open and the transcript will
+                        appear by itself.
+                    </p>
                 </FwbCard>
 
                 <FwbAlert
@@ -330,6 +378,69 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
                         class="w-full"
                     ></audio>
                 </section>
+
+                <section v-if="flow.status === 'ready'" class="flex flex-col">
+                    <div
+                        class="border-ink flex flex-wrap items-baseline justify-between gap-4 border-b-2 pb-3"
+                    >
+                        <h2 class="text-2xl font-extrabold">
+                            Transcript{{
+                                transcript ? ` #${transcript.id}` : ''
+                            }}
+                        </h2>
+                        <span class="text-ink-muted text-[13px] font-semibold"
+                            >Automatic transcript ·
+                            {{ flow.turns.length }} turns</span
+                        >
+                    </div>
+                    <div
+                        class="border-accent bg-accent-wash flex items-start gap-3 border-2 border-t-0 px-4.5 py-3.5"
+                    >
+                        <span
+                            aria-hidden="true"
+                            class="text-accent-strong font-extrabold"
+                            >!</span
+                        >
+                        <p class="max-w-[62ch] text-sm">
+                            Check names, terms and omissions against the
+                            recording.
+                            {{
+                                flow.redacted
+                                    ? 'Personal details are redacted, and redaction can miss things.'
+                                    : 'Personal details are not redacted in this transcript.'
+                            }}
+                        </p>
+                    </div>
+                    <FwbListGroup
+                        v-if="flow.turns.length"
+                        class="border-ink bg-well max-h-85 w-full overflow-auto rounded-none border-2 border-t-0"
+                    >
+                        <FwbListGroupItem
+                            v-for="(turn, index) in flow.turns"
+                            :key="index"
+                            class="border-line grid grid-cols-[96px_1fr] items-baseline gap-3 px-6 py-3.5 text-[15px] leading-relaxed"
+                        >
+                            <span
+                                class="text-ink-muted text-xs font-bold tracking-wider uppercase"
+                                >{{ turn.speaker }}</span
+                            >
+                            <span>{{ turn.text }}</span>
+                        </FwbListGroupItem>
+                    </FwbListGroup>
+                    <p
+                        v-else
+                        class="border-ink bg-well text-ink-muted border-2 border-t-0 px-6 py-5 text-[15px]"
+                    >
+                        No speech was found in this recording.
+                    </p>
+                </section>
+
+                <p
+                    v-if="flow.stored && flow.status !== 'recording'"
+                    class="text-ink-muted font-mono text-xs break-all"
+                >
+                    Saved to S3: {{ flow.stored.s3Key }}
+                </p>
             </div>
         </main>
     </div>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Contracts\RecordingStorage;
 use App\Enums\RecordingState;
+use App\Jobs\StartTranscription;
 use App\Models\Recording;
 use Illuminate\Http\JsonResponse;
 
@@ -20,6 +21,8 @@ class RecordingUploadController extends Controller
         }
 
         $recording->update(['state' => RecordingState::Uploaded]);
+
+        StartTranscription::dispatch($recording->id);
 
         return response()->json(['state' => $recording->state->value]);
     }

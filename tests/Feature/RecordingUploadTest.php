@@ -4,8 +4,10 @@ use App\Contracts\RecordingStorage;
 use App\Enums\RecordingState;
 use App\Models\Recording;
 use App\Support\PresignedUpload;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
+    Queue::fake();
     $this->storage = Mockery::mock(RecordingStorage::class);
     $this->app->instance(RecordingStorage::class, $this->storage);
 });

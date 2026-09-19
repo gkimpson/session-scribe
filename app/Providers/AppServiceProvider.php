@@ -3,7 +3,10 @@
 namespace App\Providers;
 
 use App\Contracts\RecordingStorage;
+use App\Contracts\TranscriptionProvider;
+use App\Services\AwsTranscribeProvider;
 use App\Services\S3RecordingStorage;
+use Aws\TranscribeService\TranscribeServiceClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +21,17 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(RecordingStorage::class, S3RecordingStorage::class);
+
+        $this->app->bind(TranscriptionProvider::class, fn () => new AwsTranscribeProvider(
+            new TranscribeServiceClient([
+                'version' => 'latest',
+                'region' => config('services.aws.region'),
+                'credentials' => [
+                    'key' => config('services.aws.key'),
+                    'secret' => config('services.aws.secret'),
+                ],
+            ]),
+        ));
     }
 
     /**

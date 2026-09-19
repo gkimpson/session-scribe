@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'id',
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Model;
     'size_bytes',
     'duration_seconds',
     'state',
+    'provider_job_id',
+    'failure_reason',
     'consent_confirmed_at',
 ])]
 class Recording extends Model
@@ -34,5 +37,10 @@ class Recording extends Model
             'state' => RecordingState::class,
             'consent_confirmed_at' => 'datetime',
         ];
+    }
+
+    public function transcripts(): HasMany
+    {
+        return $this->hasMany(Transcript::class);
     }
 }

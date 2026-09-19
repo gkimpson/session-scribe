@@ -16,6 +16,14 @@ return [
 
     'key_prefix' => 'voice-transcripts',
 
+    /*
+    | Ask Transcribe to redact personal information (PII) from the transcript.
+    | Each transcript records whether it was redacted, so changing this only
+    | affects new recordings.
+    */
+
+    'redact_pii' => (bool) env('RECORDINGS_REDACT_PII', true),
+
     'max_bytes' => 250 * 1024 * 1024,
 
     'max_seconds' => 60 * 60,

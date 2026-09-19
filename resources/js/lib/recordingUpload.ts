@@ -1,4 +1,4 @@
-import { store, upload } from '@/routes/recordings';
+import { show, store, upload } from '@/routes/recordings';
 
 interface CreatedRecording {
     id: string;
@@ -86,4 +86,40 @@ export async function uploadRecording(
     await postJson(upload(created.id).url);
 
     return { id: created.id, s3Key: created.s3_key };
+}
+
+export interface TranscriptTurn {
+    speaker: string;
+    text: string;
+}
+
+export interface RecordingStatus {
+    state: string;
+    failureReason: string | null;
+    turns: TranscriptTurn[] | null;
+    redacted: boolean | null;
+}
+
+export async function fetchRecording(id: string): Promise<RecordingStatus> {
+    const response = await fetch(show(id).url, {
+        headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+    }
+
+    const data = (await response.json()) as {
+        state: string;
+        failure_reason: string | null;
+        turns: TranscriptTurn[] | null;
+        redacted: boolean | null;
+    };
+
+    return {
+        state: data.state,
+        failureReason: data.failure_reason,
+        turns: data.turns,
+        redacted: data.redacted,
+    };
 }
