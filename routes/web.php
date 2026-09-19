@@ -17,6 +17,7 @@ Route::get('/{transcriptId?}', RecorderController::class)
 Route::middleware('throttle:recordings')->group(function () {
     Route::post('recordings', [RecordingController::class, 'store'])->name('recordings.store');
     Route::post('recordings/{recording}/upload', RecordingUploadController::class)->name('recordings.upload');
+    Route::delete('recordings/{recording}', [RecordingController::class, 'destroy'])->name('recordings.destroy');
 });
 
 Route::middleware('throttle:summaries')->group(function () {

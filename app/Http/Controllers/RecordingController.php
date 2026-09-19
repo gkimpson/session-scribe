@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Contracts\RecordingStorage;
 use App\Enums\RecordingState;
+use App\Exceptions\StorageFailed;
 use App\Http\Requests\StoreRecordingRequest;
 use App\Models\Recording;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Str;
 
 class RecordingController extends Controller
@@ -55,5 +57,33 @@ class RecordingController extends Controller
             'redacted' => $transcript?->redacted,
             'transcript_id' => $transcript?->uuid,
         ]);
+    }
+
+    /**
+     * Permanently removes a recording, its transcripts, its summaries and
+     * every stored file. Storage is cleared first, so a failure there leaves
+     * the records in place for another try instead of orphaning files.
+     */
+    public function destroy(Recording $recording, RecordingStorage $storage): RedirectResponse
+    {
+        $processing = [
+            RecordingState::Uploaded,
+            RecordingState::TranscriptionQueued,
+            RecordingState::Transcribing,
+        ];
+
+        if (in_array($recording->state, $processing, true)) {
+            return back()->withErrors(['delete' => 'This recording is still being processed. Try again when it has finished.']);
+        }
+
+        try {
+            $storage->purge($recording);
+        } catch (StorageFailed) {
+            return back()->withErrors(['delete' => 'The stored files could not be removed, so nothing was deleted. Try again.']);
+        }
+
+        $recording->delete();
+
+        return to_route('recordings.index');
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Contracts\RecordingStorage;
+use App\Exceptions\StorageFailed;
 use App\Models\Recording;
 use App\Support\PresignedUpload;
 use Illuminate\Support\Facades\Storage;
@@ -40,6 +41,33 @@ class S3RecordingStorage implements RecordingStorage
             Storage::disk(config('recordings.disk'))->delete($recording->s3_key);
         } catch (FilesystemException) {
             // Nothing to do. The reconcile command tries again later.
+        }
+    }
+
+    /**
+     * Includes the two names Transcribe uses for its output, so a file is
+     * still found when a failed job left no transcript row behind.
+     */
+    public function purge(Recording $recording): void
+    {
+        $keys = collect([
+            $recording->s3_key,
+            "case-event-transcripts/{$recording->id}.json",
+            "case-event-transcripts/redacted-{$recording->id}.json",
+        ])
+            ->merge($recording->transcripts()->pluck('s3_key'))
+            ->unique()
+            ->values()
+            ->all();
+
+        try {
+            $deleted = Storage::disk(config('recordings.disk'))->delete($keys);
+        } catch (FilesystemException $exception) {
+            throw new StorageFailed('The stored files could not be removed.', previous: $exception);
+        }
+
+        if (! $deleted) {
+            throw new StorageFailed('The stored files could not be removed.');
         }
     }
 }

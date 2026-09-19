@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Head, Link, usePoll } from '@inertiajs/vue3';
+import { Head, Link, router, usePoll } from '@inertiajs/vue3';
 import { FwbBadge, FwbButton } from 'flowbite-vue';
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { home } from '@/routes';
+import { destroy } from '@/routes/recordings';
 
 interface RecordingRow {
     id: string;
@@ -62,6 +63,36 @@ function labelFor(recording: RecordingRow): string {
     return isStaleUpload(recording)
         ? 'Upload not finished'
         : (stateLabels[recording.state] ?? recording.state);
+}
+
+// Removing is refused while a recording is queued or transcribing.
+function canRemove(recording: RecordingRow): boolean {
+    return !waitingStates.includes(recording.state);
+}
+
+const confirmingId = ref<string | null>(null);
+const removing = ref(false);
+const removeError = ref<string | null>(null);
+
+function askToRemove(recording: RecordingRow): void {
+    confirmingId.value = recording.id;
+    removeError.value = null;
+}
+
+function cancelRemove(): void {
+    confirmingId.value = null;
+    removeError.value = null;
+}
+
+function remove(recording: RecordingRow): void {
+    router.delete(destroy(recording.id).url, {
+        preserveScroll: true,
+        onStart: () => (removing.value = true),
+        onSuccess: () => (confirmingId.value = null),
+        onError: (errors) =>
+            (removeError.value = errors.delete ?? 'It could not be removed.'),
+        onFinish: () => (removing.value = false),
+    });
 }
 
 const hasInProgress = computed(() => props.recordings.some(isActive));
@@ -158,76 +189,141 @@ const kicker =
                         :key="recording.id"
                         class="border-line border-b last:border-b-0"
                     >
-                        <component
-                            :is="recording.transcriptId ? Link : 'div'"
-                            :href="
-                                recording.transcriptId
-                                    ? home(recording.transcriptId).url
-                                    : undefined
-                            "
-                            class="flex flex-col gap-2 px-5 py-4"
-                            :class="
-                                recording.transcriptId
-                                    ? 'hover:bg-panel focus-visible:bg-panel'
-                                    : ''
-                            "
+                        <div class="flex items-start">
+                            <component
+                                :is="recording.transcriptId ? Link : 'div'"
+                                :href="
+                                    recording.transcriptId
+                                        ? home(recording.transcriptId).url
+                                        : undefined
+                                "
+                                class="flex min-w-0 flex-1 flex-col gap-2 px-5 py-4"
+                                :class="
+                                    recording.transcriptId
+                                        ? 'hover:bg-panel focus-visible:bg-panel'
+                                        : ''
+                                "
+                            >
+                                <div
+                                    class="flex flex-wrap items-center justify-between gap-3"
+                                >
+                                    <span class="text-[15px] font-bold">{{
+                                        formatWhen(recording.createdAt)
+                                    }}</span>
+                                    <FwbBadge
+                                        :type="
+                                            recording.state === 'failed' ||
+                                            isStaleUpload(recording)
+                                                ? 'red'
+                                                : 'default'
+                                        "
+                                        class="text-xs font-extrabold tracking-widest uppercase"
+                                    >
+                                        {{ labelFor(recording) }}
+                                    </FwbBadge>
+                                </div>
+
+                                <p
+                                    v-if="recording.snippet"
+                                    class="text-ink-soft line-clamp-2 max-w-[68ch] text-[15px] leading-relaxed"
+                                >
+                                    {{ recording.snippet }}
+                                </p>
+                                <p
+                                    v-else-if="recording.failureReason"
+                                    class="text-accent-strong max-w-[68ch] text-[15px]"
+                                >
+                                    {{ recording.failureReason }}
+                                </p>
+                                <p
+                                    v-else-if="isActive(recording)"
+                                    class="text-ink-muted text-[15px]"
+                                >
+                                    The transcript will appear here when it is
+                                    ready.
+                                </p>
+
+                                <div
+                                    class="text-ink-muted flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-semibold"
+                                >
+                                    <span>{{
+                                        formatDuration(
+                                            recording.durationSeconds,
+                                        )
+                                    }}</span>
+                                    <span>{{
+                                        formatSize(recording.sizeBytes)
+                                    }}</span>
+                                    <span
+                                        v-if="recording.summariesComplete > 0"
+                                        >{{
+                                            summaryText(
+                                                recording.summariesComplete,
+                                            )
+                                        }}</span
+                                    >
+                                    <span v-if="recording.redacted === false"
+                                        >Not redacted</span
+                                    >
+                                </div>
+                            </component>
+                            <div class="flex-none px-4 py-4">
+                                <FwbButton
+                                    v-if="canRemove(recording)"
+                                    color="light"
+                                    size="xs"
+                                    :disabled="removing"
+                                    @click="askToRemove(recording)"
+                                >
+                                    Remove
+                                </FwbButton>
+                                <span
+                                    v-else
+                                    class="text-ink-muted text-xs font-semibold"
+                                    >Processing</span
+                                >
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="confirmingId === recording.id"
+                            class="border-accent bg-accent-wash flex flex-col gap-3 border-t-2 px-5 py-4"
+                            role="alertdialog"
+                            aria-label="Confirm removal"
                         >
-                            <div
-                                class="flex flex-wrap items-center justify-between gap-3"
+                            <p class="max-w-[62ch] text-[15px] font-semibold">
+                                Remove this recording permanently?
+                            </p>
+                            <p class="max-w-[62ch] text-sm">
+                                This deletes the audio, the transcript and any
+                                summaries. It cannot be undone.
+                            </p>
+                            <p
+                                v-if="removeError"
+                                class="text-accent-strong text-sm font-semibold"
                             >
-                                <span class="text-[15px] font-bold">{{
-                                    formatWhen(recording.createdAt)
-                                }}</span>
-                                <FwbBadge
-                                    :type="
-                                        recording.state === 'failed' ||
-                                        isStaleUpload(recording)
-                                            ? 'red'
-                                            : 'default'
-                                    "
-                                    class="text-xs font-extrabold tracking-widest uppercase"
+                                {{ removeError }}
+                            </p>
+                            <div class="flex flex-wrap gap-3">
+                                <FwbButton
+                                    :disabled="removing"
+                                    @click="remove(recording)"
                                 >
-                                    {{ labelFor(recording) }}
-                                </FwbBadge>
-                            </div>
-
-                            <p
-                                v-if="recording.snippet"
-                                class="text-ink-soft line-clamp-2 max-w-[68ch] text-[15px] leading-relaxed"
-                            >
-                                {{ recording.snippet }}
-                            </p>
-                            <p
-                                v-else-if="recording.failureReason"
-                                class="text-accent-strong max-w-[68ch] text-[15px]"
-                            >
-                                {{ recording.failureReason }}
-                            </p>
-                            <p
-                                v-else-if="isActive(recording)"
-                                class="text-ink-muted text-[15px]"
-                            >
-                                The transcript will appear here when it is
-                                ready.
-                            </p>
-
-                            <div
-                                class="text-ink-muted flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-semibold"
-                            >
-                                <span>{{
-                                    formatDuration(recording.durationSeconds)
-                                }}</span>
-                                <span>{{
-                                    formatSize(recording.sizeBytes)
-                                }}</span>
-                                <span v-if="recording.summariesComplete > 0">{{
-                                    summaryText(recording.summariesComplete)
-                                }}</span>
-                                <span v-if="recording.redacted === false"
-                                    >Not redacted</span
+                                    {{
+                                        removing
+                                            ? 'Removing…'
+                                            : 'Remove permanently'
+                                    }}
+                                </FwbButton>
+                                <FwbButton
+                                    color="light"
+                                    :disabled="removing"
+                                    @click="cancelRemove()"
                                 >
+                                    Cancel
+                                </FwbButton>
                             </div>
-                        </component>
+                        </div>
                     </li>
                 </ul>
 

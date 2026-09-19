@@ -82,7 +82,7 @@ index.form = indexForm
 
 /**
 * @see \App\Http\Controllers\RecordingController::store
-* @see app/Http/Controllers/RecordingController.php:14
+* @see app/Http/Controllers/RecordingController.php:16
 * @route '/recordings'
 */
 export const store = (options?: RouteQueryOptions): RouteDefinition<'post'> => ({
@@ -97,7 +97,7 @@ store.definition = {
 
 /**
 * @see \App\Http\Controllers\RecordingController::store
-* @see app/Http/Controllers/RecordingController.php:14
+* @see app/Http/Controllers/RecordingController.php:16
 * @route '/recordings'
 */
 store.url = (options?: RouteQueryOptions) => {
@@ -106,7 +106,7 @@ store.url = (options?: RouteQueryOptions) => {
 
 /**
 * @see \App\Http\Controllers\RecordingController::store
-* @see app/Http/Controllers/RecordingController.php:14
+* @see app/Http/Controllers/RecordingController.php:16
 * @route '/recordings'
 */
 store.post = (options?: RouteQueryOptions): RouteDefinition<'post'> => ({
@@ -116,7 +116,7 @@ store.post = (options?: RouteQueryOptions): RouteDefinition<'post'> => ({
 
 /**
 * @see \App\Http\Controllers\RecordingController::store
-* @see app/Http/Controllers/RecordingController.php:14
+* @see app/Http/Controllers/RecordingController.php:16
 * @route '/recordings'
 */
 const storeForm = (options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
@@ -126,7 +126,7 @@ const storeForm = (options?: RouteQueryOptions): RouteFormDefinition<'post'> => 
 
 /**
 * @see \App\Http\Controllers\RecordingController::store
-* @see app/Http/Controllers/RecordingController.php:14
+* @see app/Http/Controllers/RecordingController.php:16
 * @route '/recordings'
 */
 storeForm.post = (options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
@@ -217,8 +217,98 @@ uploadForm.post = (args: { recording: string | { id: string } } | [recording: st
 upload.form = uploadForm
 
 /**
+* @see \App\Http\Controllers\RecordingController::destroy
+* @see app/Http/Controllers/RecordingController.php:67
+* @route '/recordings/{recording}'
+*/
+export const destroy = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteDefinition<'delete'> => ({
+    url: destroy.url(args, options),
+    method: 'delete',
+})
+
+destroy.definition = {
+    methods: ["delete"],
+    url: '/recordings/{recording}',
+} satisfies RouteDefinition<["delete"]>
+
+/**
+* @see \App\Http\Controllers\RecordingController::destroy
+* @see app/Http/Controllers/RecordingController.php:67
+* @route '/recordings/{recording}'
+*/
+destroy.url = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions) => {
+    if (typeof args === 'string' || typeof args === 'number') {
+        args = { recording: args }
+    }
+
+    if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
+        args = { recording: args.id }
+    }
+
+    if (Array.isArray(args)) {
+        args = {
+            recording: args[0],
+        }
+    }
+
+    args = applyUrlDefaults(args)
+
+    const parsedArgs = {
+        recording: typeof args.recording === 'object'
+        ? args.recording.id
+        : args.recording,
+    }
+
+    return destroy.definition.url
+            .replace('{recording}', parsedArgs.recording.toString())
+            .replace(/\/+$/, '') + queryParams(options)
+}
+
+/**
+* @see \App\Http\Controllers\RecordingController::destroy
+* @see app/Http/Controllers/RecordingController.php:67
+* @route '/recordings/{recording}'
+*/
+destroy.delete = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteDefinition<'delete'> => ({
+    url: destroy.url(args, options),
+    method: 'delete',
+})
+
+/**
+* @see \App\Http\Controllers\RecordingController::destroy
+* @see app/Http/Controllers/RecordingController.php:67
+* @route '/recordings/{recording}'
+*/
+const destroyForm = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
+    action: destroy.url(args, {
+        [options?.mergeQuery ? 'mergeQuery' : 'query']: {
+            _method: 'DELETE',
+            ...(options?.query ?? options?.mergeQuery ?? {}),
+        }
+    }),
+    method: 'post',
+})
+
+/**
+* @see \App\Http\Controllers\RecordingController::destroy
+* @see app/Http/Controllers/RecordingController.php:67
+* @route '/recordings/{recording}'
+*/
+destroyForm.delete = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteFormDefinition<'post'> => ({
+    action: destroy.url(args, {
+        [options?.mergeQuery ? 'mergeQuery' : 'query']: {
+            _method: 'DELETE',
+            ...(options?.query ?? options?.mergeQuery ?? {}),
+        }
+    }),
+    method: 'post',
+})
+
+destroy.form = destroyForm
+
+/**
 * @see \App\Http\Controllers\RecordingController::show
-* @see app/Http/Controllers/RecordingController.php:44
+* @see app/Http/Controllers/RecordingController.php:46
 * @route '/recordings/{recording}'
 */
 export const show = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteDefinition<'get'> => ({
@@ -233,7 +323,7 @@ show.definition = {
 
 /**
 * @see \App\Http\Controllers\RecordingController::show
-* @see app/Http/Controllers/RecordingController.php:44
+* @see app/Http/Controllers/RecordingController.php:46
 * @route '/recordings/{recording}'
 */
 show.url = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions) => {
@@ -266,7 +356,7 @@ show.url = (args: { recording: string | { id: string } } | [recording: string | 
 
 /**
 * @see \App\Http\Controllers\RecordingController::show
-* @see app/Http/Controllers/RecordingController.php:44
+* @see app/Http/Controllers/RecordingController.php:46
 * @route '/recordings/{recording}'
 */
 show.get = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteDefinition<'get'> => ({
@@ -276,7 +366,7 @@ show.get = (args: { recording: string | { id: string } } | [recording: string | 
 
 /**
 * @see \App\Http\Controllers\RecordingController::show
-* @see app/Http/Controllers/RecordingController.php:44
+* @see app/Http/Controllers/RecordingController.php:46
 * @route '/recordings/{recording}'
 */
 show.head = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteDefinition<'head'> => ({
@@ -286,7 +376,7 @@ show.head = (args: { recording: string | { id: string } } | [recording: string |
 
 /**
 * @see \App\Http\Controllers\RecordingController::show
-* @see app/Http/Controllers/RecordingController.php:44
+* @see app/Http/Controllers/RecordingController.php:46
 * @route '/recordings/{recording}'
 */
 const showForm = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
@@ -296,7 +386,7 @@ const showForm = (args: { recording: string | { id: string } } | [recording: str
 
 /**
 * @see \App\Http\Controllers\RecordingController::show
-* @see app/Http/Controllers/RecordingController.php:44
+* @see app/Http/Controllers/RecordingController.php:46
 * @route '/recordings/{recording}'
 */
 showForm.get = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
@@ -306,7 +396,7 @@ showForm.get = (args: { recording: string | { id: string } } | [recording: strin
 
 /**
 * @see \App\Http\Controllers\RecordingController::show
-* @see app/Http/Controllers/RecordingController.php:44
+* @see app/Http/Controllers/RecordingController.php:46
 * @route '/recordings/{recording}'
 */
 showForm.head = (args: { recording: string | { id: string } } | [recording: string | { id: string } ] | string | { id: string }, options?: RouteQueryOptions): RouteFormDefinition<'get'> => ({
@@ -325,6 +415,7 @@ const recordings = {
     index: Object.assign(index, index),
     store: Object.assign(store, store),
     upload: Object.assign(upload, upload),
+    destroy: Object.assign(destroy, destroy),
     show: Object.assign(show, show),
 }
 

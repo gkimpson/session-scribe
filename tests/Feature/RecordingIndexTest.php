@@ -1,10 +1,13 @@
 <?php
 
+use App\Contracts\RecordingStorage;
 use App\Enums\RecordingState;
 use App\Enums\SummaryState;
+use App\Exceptions\StorageFailed;
 use App\Models\Recording;
 use App\Models\Summary;
 use App\Models\Transcript;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 
 it('shows an empty list when there are no recordings', function () {
@@ -100,4 +103,62 @@ it('does not run a query per row', function () {
     $this->get(route('recordings.index'))->assertOk();
 
     expect(count(DB::getQueryLog()))->toBeLessThan(6);
+});
+
+describe('removing a recording', function () {
+    beforeEach(function () {
+        $this->storage = Mockery::mock(RecordingStorage::class);
+        $this->app->instance(RecordingStorage::class, $this->storage);
+    });
+
+    it('deletes the recording, its transcripts, its summaries and its stored files', function () {
+        $recording = Recording::factory()->create(['state' => RecordingState::Ready]);
+        $transcript = Transcript::factory()->for($recording)->create();
+        Summary::factory()->complete()->for($transcript)->create();
+        $other = Recording::factory()->create(['state' => RecordingState::Ready]);
+        $otherTranscript = Transcript::factory()->for($other)->create();
+        $this->storage->shouldReceive('purge')->once()->with(Mockery::on(fn ($r) => $r->is($recording)));
+
+        $this->delete(route('recordings.destroy', $recording))->assertRedirect(route('recordings.index'));
+
+        expect(Recording::find($recording->id))->toBeNull()
+            ->and(Transcript::find($transcript->id))->toBeNull()
+            ->and(Summary::count())->toBe(0)
+            ->and(Recording::find($other->id))->not->toBeNull()
+            ->and(Transcript::find($otherTranscript->id))->not->toBeNull();
+    });
+
+    it('can remove failed and unfinished recordings', function (RecordingState $state) {
+        $recording = Recording::factory()->create(['state' => $state]);
+        $this->storage->shouldReceive('purge')->once();
+
+        $this->delete(route('recordings.destroy', $recording))->assertRedirect(route('recordings.index'));
+
+        expect(Recording::find($recording->id))->toBeNull();
+    })->with([RecordingState::Failed, RecordingState::PendingUpload, RecordingState::Ready]);
+
+    it('refuses while the recording is still being processed', function (RecordingState $state) {
+        $recording = Recording::factory()->create(['state' => $state]);
+        $this->storage->shouldNotReceive('purge');
+
+        $this->delete(route('recordings.destroy', $recording))->assertSessionHasErrors('delete');
+
+        expect(Recording::find($recording->id))->not->toBeNull();
+    })->with([RecordingState::Uploaded, RecordingState::TranscriptionQueued, RecordingState::Transcribing]);
+
+    it('keeps everything when storage cannot be cleared', function () {
+        $recording = Recording::factory()->create(['state' => RecordingState::Ready]);
+        $transcript = Transcript::factory()->for($recording)->create();
+        $this->storage->shouldReceive('purge')->andThrow(new StorageFailed('nope'));
+
+        $this->delete(route('recordings.destroy', $recording))
+            ->assertSessionHasErrors(['delete' => 'The stored files could not be removed, so nothing was deleted. Try again.']);
+
+        expect(Recording::find($recording->id))->not->toBeNull()
+            ->and(Transcript::find($transcript->id))->not->toBeNull();
+    });
+
+    it('returns 404 for a recording that does not exist', function () {
+        $this->delete(route('recordings.destroy', (string) Str::uuid()))->assertNotFound();
+    });
 });
