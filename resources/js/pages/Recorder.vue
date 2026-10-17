@@ -680,13 +680,6 @@ const card = 'min-w-0 border-2 border-ink shadow-none';
                         </div>
                     </div>
                 </section>
-
-                <p
-                    v-if="flow.stored && flow.status !== 'recording'"
-                    class="text-ink-muted font-mono text-xs break-all"
-                >
-                    Saved to S3: {{ flow.stored.s3Key }}
-                </p>
             </div>
         </main>
     </div>
